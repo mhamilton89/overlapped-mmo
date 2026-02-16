@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Original asset pack (large FBX source files kept in assets)
+craftpix-781618-free-tree-3d-low-poly-pack/

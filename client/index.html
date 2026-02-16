@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overlapped - 3D MMO</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- HUD Overlay -->
+        <div id="hud">
+            <!-- Player info (top-left) -->
+            <div id="player-frame">
+                <div id="player-name">Player</div>
+                <div class="bar-container">
+                    <div id="health-bar" class="bar health"></div>
+                    <span id="health-text" class="bar-text">100 / 100</span>
+                </div>
+                <div class="bar-container">
+                    <div id="mana-bar" class="bar mana"></div>
+                    <span id="mana-text" class="bar-text">100 / 100</span>
+                </div>
+            </div>
+
+            <!-- Target frame (top-center) -->
+            <div id="target-frame" class="hidden">
+                <div id="target-name">Target</div>
+                <div class="bar-container">
+                    <div id="target-health-bar" class="bar health"></div>
+                    <span id="target-health-text" class="bar-text"></span>
+                </div>
+            </div>
+
+            <!-- Gather progress bar (bottom-center) -->
+            <div id="gather-progress" class="hidden">
+                <div id="gather-fill"></div>
+                <span id="gather-text">Gathering...</span>
+            </div>
+
+            <!-- Tooltip -->
+            <div id="tooltip" class="hidden">
+                <span id="tooltip-text"></span>
+                <span id="tooltip-hint">Press E to gather</span>
+            </div>
+
+            <!-- Debug info (top-right) -->
+            <div id="debug-info">
+                <div id="fps-counter">FPS: 0</div>
+                <div id="position-info">Pos: 0, 0, 0</div>
+            </div>
+
+            <!-- Loading screen -->
+            <div id="loading-screen">
+                <div id="loading-content">
+                    <h1>Overlapped</h1>
+                    <div id="loading-bar-container">
+                        <div id="loading-bar"></div>
+                    </div>
+                    <div id="loading-text">Loading assets...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

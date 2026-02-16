@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(wc:*)",
+      "Bash(pg_isready:*)",
+      "Bash(node:*)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U postgres -h 127.0.0.1 -c \"SELECT 1\")",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U postgres -h 127.0.0.1 -c \"CREATE DATABASE overlapped;\")",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql.exe\":*)",
+      "Bash(python3:*)",
+      "Bash(# Check what''s on port 3000 netstat -ano | grep \"\":3000 \"\" | head -5 || ss -tlnp)",
+      "Bash(ss:*)",
+      "Bash(# Kill the old Vite that''s on 3000 and the one that just started on 3001 taskkill //PID 158472 //F sleep 1 # Kill any vite processes tasklist)",
+      "Bash(# Check what''s on port 3001 netstat -ano)",
+      "Bash(# Kill the stale Vite on 3001 taskkill //PID 27960 //F sleep 1 # Verify netstat -ano)",
+      "Bash(# Verify port status echo \"\"Port 3000 \\(Vite\\):\"\" netstat -ano)",
+      "Bash(gh auth status:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
