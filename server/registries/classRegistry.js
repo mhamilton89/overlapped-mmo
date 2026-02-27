@@ -17,9 +17,9 @@ module.exports = {
         statGrowth: { str: 2, int: 2, dex: 1, vit: 3, sta: 2 },
         description: 'A holy warrior balancing strength and magic'
     },
-    Rogue: {
+    Ranger: {
         baseStats: { str: 6, int: 4, dex: 14, vit: 6, sta: 10 },
         statGrowth: { str: 1.5, int: 1, dex: 3.5, vit: 1.5, sta: 2.5 },
-        description: 'A swift fighter with high critical chance'
+        description: 'A swift ranged fighter with high critical chance'
     }
 };

@@ -62,6 +62,7 @@ class GameWorld {
                         maxHp: template.baseHp,
                         damage: template.baseDamage,
                         attackSpeed: template.attackSpeed,
+                        moveSpeed: template.moveSpeed,
                         aggroRange: template.aggroRange,
                         chaseRange: template.chaseRange,
                         meleeRange: template.meleeRange,
@@ -146,6 +147,7 @@ class GameWorld {
                 .filter(e => e.alive)
                 .map(e => ({
                     id: e.id,
+                    key: e.key,
                     name: e.name,
                     level: e.level,
                     x: e.x,

@@ -13,6 +13,15 @@ class CombatSystem {
             return;
         }
 
+        // Sync player position from attack message (client sends current pos)
+        if (typeof message.x === 'number' && typeof message.y === 'number') {
+            player.x = message.x;
+            player.y = message.y;
+            player.lastPositionX = message.x;
+            player.lastPositionY = message.y;
+            player.lastMoveTime = Date.now();
+        }
+
         // Cancel gathering
         if (player.gatherState) {
             player.gatherState = null;
@@ -44,9 +53,10 @@ class CombatSystem {
             return;
         }
 
-        // Range check
+        // Range check (generous — client validates at 4.0, allow extra for position sync lag)
         const dist = distance2D(player.x, player.y, enemy.x, enemy.y);
-        if (dist > config.MELEE_RANGE + 0.5) {
+        const maxRange = config.MELEE_RANGE + 2;
+        if (dist > maxRange) {
             player.send({ type: 'error', message: 'Out of range' });
             return;
         }
@@ -115,7 +125,7 @@ class CombatSystem {
         }
 
         const dist = distance2D(player.x, player.y, enemy.x, enemy.y);
-        if (dist > config.MELEE_RANGE + 0.5) {
+        if (dist > config.MELEE_RANGE + 2) {
             player.send({ type: 'error', message: 'Out of range' });
             return;
         }

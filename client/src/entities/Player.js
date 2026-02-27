@@ -1,11 +1,9 @@
 import * as THREE from 'three';
+import { CharacterModel } from './CharacterModel.js';
+import { getCharacterVisuals } from './armorVisuals.js';
 
-const CLASS_COLORS = {
-    'Warrior': 0xc62828,
-    'Wizard': 0x1565c0,
-    'Paladin': 0xffd54f,
-    'Rogue': 0x6a1b9a
-};
+const PLAYER_RADIUS = 0.5;
+const TREE_COLLISION_RADIUS = 1.2;
 
 export class Player {
     constructor(scene, characterData = {}) {
@@ -13,46 +11,36 @@ export class Player {
         this.characterData = characterData;
         this.moveSpeed = 7;
         this.mesh = null;
+        this.model = null;
         this.velocity = new THREE.Vector3();
         this.direction = new THREE.Vector3();
+        this.isMoving = false;
+
+        // Collision obstacles set by Game.js
+        this.collisionObjects = [];
 
         this.createMesh();
     }
 
     createMesh() {
-        const color = CLASS_COLORS[this.characterData.class] || 0x888888;
-
-        // Capsule body
-        const bodyGeo = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
-        const bodyMat = new THREE.MeshStandardMaterial({
-            color,
-            roughness: 0.6,
-            metalness: 0.2
-        });
-        this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.castShadow = true;
-        this.mesh.position.set(0, 1, 0); // Center of capsule at y=1
-
-        // Simple head sphere
-        const headGeo = new THREE.SphereGeometry(0.3, 8, 8);
-        const headMat = new THREE.MeshStandardMaterial({
-            color: 0xf5d0a9,
-            roughness: 0.7
-        });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 1.0;
-        head.castShadow = true;
-        this.mesh.add(head);
-
+        this.model = new CharacterModel(this.characterData.class);
+        this.mesh = this.model.group;
+        this.mesh.position.set(0, 1, 0);
         this.scene.add(this.mesh);
+
+        // Apply armor visuals (class defaults merged with any server equipment)
+        const visuals = getCharacterVisuals(
+            this.characterData.class,
+            this.characterData.equipment
+        );
+        this.model.applyEquipment(visuals);
     }
 
-    /**
-     * Update player movement based on input
-     * @param {number} deltaTime
-     * @param {object} keys - Input keys state
-     * @param {number} cameraYaw - Camera horizontal rotation
-     */
+    updateEquipment(serverEquipment) {
+        const visuals = getCharacterVisuals(this.characterData.class, serverEquipment);
+        this.model.applyEquipment(visuals);
+    }
+
     update(deltaTime, keys, cameraYaw) {
         this.direction.set(0, 0, 0);
 
@@ -61,31 +49,54 @@ export class Player {
         if (keys.left) this.direction.x -= 1;
         if (keys.right) this.direction.x += 1;
 
-        if (this.direction.lengthSq() > 0) {
+        this.isMoving = this.direction.lengthSq() > 0;
+
+        if (this.isMoving) {
             this.direction.normalize();
-
-            // Rotate movement direction relative to camera yaw
             this.direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
-
-            // Apply movement
             this.mesh.position.addScaledVector(this.direction, this.moveSpeed * deltaTime);
 
-            // Face movement direction
             const targetRotation = Math.atan2(this.direction.x, this.direction.z);
-            // Smooth rotation
             let rotDiff = targetRotation - this.mesh.rotation.y;
             while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
             while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
             this.mesh.rotation.y += rotDiff * Math.min(1, 10 * deltaTime);
         }
 
-        // Clamp to terrain bounds (256 units from center)
+        // Tree collision
+        this.resolveCollisions();
+
+        // Clamp to terrain bounds
         const bounds = 250;
         this.mesh.position.x = Math.max(-bounds, Math.min(bounds, this.mesh.position.x));
         this.mesh.position.z = Math.max(-bounds, Math.min(bounds, this.mesh.position.z));
 
         // Keep on ground
         this.mesh.position.y = 1;
+
+        // Animate character model
+        this.model.update(deltaTime, this.isMoving);
+    }
+
+    resolveCollisions() {
+        const px = this.mesh.position.x;
+        const pz = this.mesh.position.z;
+
+        for (const obj of this.collisionObjects) {
+            const ox = obj.position.x;
+            const oz = obj.position.z;
+            const dx = px - ox;
+            const dz = pz - oz;
+            const distSq = dx * dx + dz * dz;
+            const minDist = PLAYER_RADIUS + TREE_COLLISION_RADIUS;
+
+            if (distSq < minDist * minDist && distSq > 0.0001) {
+                const dist = Math.sqrt(distSq);
+                const overlap = minDist - dist;
+                this.mesh.position.x += (dx / dist) * overlap;
+                this.mesh.position.z += (dz / dist) * overlap;
+            }
+        }
     }
 
     getPosition() {

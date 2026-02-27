@@ -12,7 +12,7 @@ module.exports = [
             { itemKey: 'oak_wood', min: 3, max: 7 },
         ],
         xpReward: 15,
-        respawnMs: 60000,
+        respawnMs: 120000,
         spawns: [
             { id: 'gather_tree_0', x: 15, y: 5 },
             { id: 'gather_tree_1', x: -12, y: 8 },

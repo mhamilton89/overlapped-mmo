@@ -1,18 +1,15 @@
 import * as THREE from 'three';
-
-const CLASS_COLORS = {
-    'Warrior': 0xc62828,
-    'Wizard': 0x1565c0,
-    'Paladin': 0xffd54f,
-    'Rogue': 0x6a1b9a
-};
+import { CharacterModel } from './CharacterModel.js';
+import { getCharacterVisuals } from './armorVisuals.js';
 
 export class OtherPlayer {
     constructor(scene, playerData) {
         this.scene = scene;
         this.id = playerData.id;
         this.name = playerData.name || 'Player';
+        this.className = playerData.class;
         this.mesh = null;
+        this.model = null;
         this.nameplate = null;
 
         // Interpolation
@@ -25,16 +22,8 @@ export class OtherPlayer {
     }
 
     createMesh(data) {
-        const color = CLASS_COLORS[data.class] || 0x888888;
-
-        const bodyGeo = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
-        const bodyMat = new THREE.MeshStandardMaterial({
-            color,
-            roughness: 0.6,
-            metalness: 0.2
-        });
-        this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.castShadow = true;
+        this.model = new CharacterModel(data.class);
+        this.mesh = this.model.group;
 
         // Set initial position (map 2D y to 3D z)
         const x = data.x || 0;
@@ -42,14 +31,16 @@ export class OtherPlayer {
         this.mesh.position.set(x, 1, z);
         this.targetPosition.set(x, 1, z);
 
-        // Head
-        const headGeo = new THREE.SphereGeometry(0.3, 8, 8);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0xf5d0a9, roughness: 0.7 });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 1.0;
-        this.mesh.add(head);
-
         this.scene.add(this.mesh);
+
+        // Apply armor visuals
+        const visuals = getCharacterVisuals(data.class, data.equipment);
+        this.model.applyEquipment(visuals);
+    }
+
+    updateEquipment(serverEquipment) {
+        const visuals = getCharacterVisuals(this.className, serverEquipment);
+        this.model.applyEquipment(visuals);
     }
 
     createNameplate() {
@@ -85,6 +76,9 @@ export class OtherPlayer {
     }
 
     update(deltaTime) {
+        // Detect movement for animation
+        const isMoving = this.mesh.position.distanceTo(this.targetPosition) > 0.05;
+
         // Interpolate position
         this.mesh.position.lerp(this.targetPosition, Math.min(1, this.interpSpeed * deltaTime));
 
@@ -93,9 +87,13 @@ export class OtherPlayer {
         while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
         while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
         this.mesh.rotation.y += rotDiff * Math.min(1, this.interpSpeed * deltaTime);
+
+        // Animate character
+        this.model.update(deltaTime, isMoving);
     }
 
     destroy() {
+        this.model.dispose();
         this.scene.remove(this.mesh);
     }
 }

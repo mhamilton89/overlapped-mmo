@@ -46,6 +46,23 @@
                 <span id="tooltip-hint">Press E to gather</span>
             </div>
 
+            <!-- Inventory panel (bottom-right, toggle with B or I) -->
+            <div id="inventory-panel" class="hidden">
+                <div id="inventory-header">
+                    <span>Inventory</span>
+                    <button id="inventory-close">&times;</button>
+                </div>
+                <div id="inventory-slots"></div>
+            </div>
+
+            <!-- Bag button (bottom-right) -->
+            <div id="bag-button" title="Inventory (B)">
+                <span id="bag-icon">&#128188;</span>
+            </div>
+
+            <!-- Floating loot text container -->
+            <div id="loot-popups"></div>
+
             <!-- Debug info (top-right) -->
             <div id="debug-info">
                 <div id="fps-counter">FPS: 0</div>
@@ -60,6 +77,15 @@
                         <div id="loading-bar"></div>
                     </div>
                     <div id="loading-text">Loading assets...</div>
+                </div>
+            </div>
+
+            <!-- Death screen -->
+            <div id="death-screen" class="hidden">
+                <div id="death-content">
+                    <h1>You Died</h1>
+                    <p id="death-message"></p>
+                    <button id="respawn-button">Respawn</button>
                 </div>
             </div>
         </div>

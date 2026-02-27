@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS characters (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id    UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     name          VARCHAR(24) UNIQUE NOT NULL,
-    class         VARCHAR(16) NOT NULL CHECK (class IN ('Warrior','Wizard','Paladin','Rogue')),
+    class         VARCHAR(16) NOT NULL CHECK (class IN ('Warrior','Wizard','Paladin','Ranger')),
     level         INT NOT NULL DEFAULT 1,
     xp            INT NOT NULL DEFAULT 0,
     current_hp    INT NOT NULL,

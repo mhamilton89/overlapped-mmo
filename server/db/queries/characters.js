@@ -41,8 +41,8 @@ async function saveCharacterState(id, state) {
             current_hp = $5, current_mana = $6,
             xp = $7, level = $8, gold = $9
          WHERE id = $1`,
-        [id, state.x, state.y, state.rotation,
-         state.hp, state.mana, state.xp, state.level, state.gold]
+        [id, Math.round(state.x), Math.round(state.y), state.rotation,
+         Math.round(state.hp), Math.round(state.mana), state.xp, state.level, state.gold]
     );
 }
 

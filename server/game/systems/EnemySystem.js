@@ -119,7 +119,7 @@ class EnemySystem {
 
         if (distToTarget <= enemy.meleeRange) {
             enemy.state = 'attack';
-            enemy.attackTimer = 0;
+            enemy.attackTimer = enemy.attackSpeed; // Attack immediately on first contact
         } else {
             this.moveToward(enemy, target.x, target.y, enemy.moveSpeed, deltaSec);
         }
@@ -249,6 +249,7 @@ class EnemySystem {
         this.world.broadcast({
             type: 'enemyRespawned',
             id: enemy.id,
+            key: enemy.key,
             name: enemy.name,
             level: enemy.level,
             x: enemy.x,
@@ -266,6 +267,7 @@ class EnemySystem {
             if (!enemy.alive) continue;
             updates.push({
                 id: enemy.id,
+                key: enemy.key,
                 x: enemy.x,
                 y: enemy.y,
                 hp: enemy.hp,

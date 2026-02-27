@@ -42,8 +42,6 @@ export class WebSocketClient {
                     const handler = this.handlers.get(message.type);
                     if (handler) {
                         handler(message);
-                    } else {
-                        console.log('[WS] Unhandled message:', message.type, message);
                     }
                 } catch (err) {
                     console.error('[WS] Parse error:', err);
@@ -88,9 +86,9 @@ export class WebSocketClient {
         this.send('selectCharacter', { characterId });
     }
 
-    sendMove(x, z, rotation) {
+    sendMove(x, z, rotation, force = false) {
         const now = Date.now();
-        if (now - this.lastMoveSent < this.moveThrottleMs) return;
+        if (!force && now - this.lastMoveSent < this.moveThrottleMs) return;
         this.lastMoveSent = now;
 
         // Map 3D coords to 2D: x stays x, z becomes y
@@ -105,8 +103,8 @@ export class WebSocketClient {
         this.send('gatherCancel');
     }
 
-    sendAttack(targetId) {
-        this.send('attack', { targetId });
+    sendAttack(targetId, x, z) {
+        this.send('attack', { targetId, x, y: z });
     }
 
     sendChat(message) {
@@ -115,6 +113,10 @@ export class WebSocketClient {
 
     sendLootPickup(lootId) {
         this.send('lootPickup', { lootId });
+    }
+
+    sendRespawn() {
+        this.send('respawn');
     }
 
     disconnect() {

@@ -176,6 +176,172 @@ body {
     margin-top: 2px;
 }
 
+/* Inventory Panel */
+#inventory-panel {
+    position: absolute;
+    bottom: 60px;
+    right: 15px;
+    width: 280px;
+    max-height: 400px;
+    background: rgba(15, 10, 5, 0.92);
+    border: 2px solid #8b7355;
+    border-radius: 6px;
+    z-index: 10;
+}
+
+#inventory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #5a4a3a;
+    font-size: 15px;
+    font-weight: bold;
+    color: #ffd700;
+}
+
+#inventory-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+
+#inventory-close:hover {
+    color: #fff;
+}
+
+#inventory-slots {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    padding: 8px;
+    max-height: 330px;
+    overflow-y: auto;
+}
+
+.inv-slot {
+    aspect-ratio: 1;
+    background: rgba(40, 30, 20, 0.8);
+    border: 1px solid #5a4a3a;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: default;
+}
+
+.inv-slot.has-item {
+    border-color: #8b7355;
+}
+
+.inv-slot .inv-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.inv-slot .inv-qty {
+    position: absolute;
+    bottom: 1px;
+    right: 3px;
+    font-size: 10px;
+    color: #ffd700;
+    text-shadow: 1px 1px 1px #000;
+}
+
+.inv-slot .inv-name {
+    display: none;
+}
+
+.inv-slot:hover .inv-name {
+    display: block;
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid #8b7355;
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #eee;
+    white-space: nowrap;
+    z-index: 20;
+}
+
+/* Bag Button */
+#bag-button {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+    background: rgba(15, 10, 5, 0.85);
+    border: 2px solid #8b7355;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+}
+
+#bag-button:hover {
+    border-color: #ffd700;
+}
+
+#bag-icon {
+    font-size: 20px;
+}
+
+/* Loot Popups */
+#loot-popups {
+    position: absolute;
+    bottom: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+    z-index: 15;
+}
+
+.loot-popup {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffd700;
+    text-shadow: 1px 1px 2px #000, 0 0 8px rgba(255, 215, 0, 0.4);
+    white-space: nowrap;
+    animation: lootFloat 2s ease-out forwards;
+}
+
+@keyframes lootFloat {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    70% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-60px);
+    }
+}
+
+/* Bag button flash */
+#bag-button.flash {
+    border-color: #ffd700;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+}
+
 /* Debug Info */
 #debug-info {
     position: absolute;
@@ -241,6 +407,54 @@ body {
 #loading-text {
     font-size: 14px;
     color: #888;
+}
+
+/* Death Screen */
+#death-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(80, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 90;
+}
+
+#death-content {
+    text-align: center;
+}
+
+#death-content h1 {
+    font-size: 52px;
+    color: #cc0000;
+    margin-bottom: 15px;
+    letter-spacing: 3px;
+    text-shadow: 0 0 30px rgba(200, 0, 0, 0.5);
+}
+
+#death-content p {
+    font-size: 16px;
+    color: #ccc;
+    margin-bottom: 25px;
+}
+
+#respawn-button {
+    padding: 12px 40px;
+    font-size: 18px;
+    font-family: inherit;
+    background: #8b0000;
+    color: #ffd700;
+    border: 2px solid #ffd700;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 2px;
+}
+
+#respawn-button:hover {
+    background: #aa0000;
 }
 
 /* Utility */

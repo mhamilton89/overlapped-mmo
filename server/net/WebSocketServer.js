@@ -1,6 +1,8 @@
 const WebSocket = require('ws');
 const { verifyWsToken } = require('../auth/middleware');
 const characterQueries = require('../db/queries/characters');
+const equipmentQueries = require('../db/queries/equipment');
+const equipmentRegistry = require('../registries/equipmentRegistry');
 const config = require('../config');
 const { generateId } = require('../utils/ids');
 
@@ -114,16 +116,48 @@ async function handleMessage(world, ws, message) {
             }
             break;
 
-        case 'equipItem':
-            if (world.systems.inventory) {
-                world.systems.inventory.handleEquip(player, message);
+        case 'respawn':
+            if (!player.isAlive()) {
+                player.currentHp = player.maxHp;
+                player.currentMana = player.maxMana;
+                player.x = 0;
+                player.y = 0;
+                player.lastPositionX = 0;
+                player.lastPositionY = 0;
+                player.lastMoveTime = Date.now();
+                player.powerStacks = 0;
+                player.dirty = true;
+                console.log(`[Respawn] ${player.name} respawned at origin`);
+
+                player.send({
+                    type: 'respawned',
+                    x: player.x,
+                    y: player.y,
+                    hp: player.currentHp,
+                    maxHp: player.maxHp,
+                    mana: player.currentMana,
+                    maxMana: player.maxMana,
+                });
+                player.send({
+                    type: 'playerStats',
+                    hp: player.currentHp,
+                    maxHp: player.maxHp,
+                    mana: Math.floor(player.currentMana),
+                    maxMana: player.maxMana,
+                    xp: player.xp,
+                    level: player.level,
+                    gold: player.gold,
+                    powerStacks: player.powerStacks,
+                });
             }
             break;
 
+        case 'equipItem':
+            await handleEquipItem(world, player, message);
+            break;
+
         case 'unequipItem':
-            if (world.systems.inventory) {
-                world.systems.inventory.handleUnequip(player, message);
-            }
+            await handleUnequipItem(world, player, message);
             break;
 
         case 'chatMessage':
@@ -174,11 +208,18 @@ async function handleSelectCharacter(world, ws, message) {
         return;
     }
 
-    // Check if character is already online
+    // If character is already online, kick the old connection and take over
     const alreadyOnline = world.getPlayerByCharacterId(characterId);
     if (alreadyOnline) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Character already online' }));
-        return;
+        console.log(`[WS] ${characterData.name} already online on socket ${alreadyOnline.socketId}, replacing with ${ws._socketId}`);
+        // Notify old connection
+        try {
+            alreadyOnline.send({ type: 'error', message: 'Logged in from another session' });
+            alreadyOnline.ws.close();
+        } catch (e) { /* old socket may already be dead */ }
+        // Remove old player
+        world.removePlayer(alreadyOnline.socketId);
+        world.broadcast({ type: 'playerLeft', id: alreadyOnline.characterId });
     }
 
     // Create player in world
@@ -203,6 +244,124 @@ async function handleSelectCharacter(world, ws, message) {
     });
 
     console.log(`[WS] ${player.name} (${player.class} Lv.${player.level}) entered the world`);
+}
+
+async function handleEquipItem(world, player, message) {
+    const { itemKey } = message;
+
+    if (!itemKey) {
+        player.send({ type: 'error', message: 'itemKey required' });
+        return;
+    }
+
+    // Verify item exists in equipment registry
+    const itemDef = equipmentRegistry[itemKey];
+    if (!itemDef) {
+        player.send({ type: 'error', message: 'Invalid equipment item' });
+        return;
+    }
+
+    // Check level requirement
+    if (itemDef.levelReq && player.level < itemDef.levelReq) {
+        player.send({ type: 'error', message: `Requires level ${itemDef.levelReq}` });
+        return;
+    }
+
+    // Check player has the item in inventory
+    const hasItem = player.inventory.find(i => i.item_key === itemKey);
+    if (!hasItem) {
+        player.send({ type: 'error', message: 'Item not in inventory' });
+        return;
+    }
+
+    const slot = itemDef.slot;
+
+    try {
+        // Equip in DB (upserts, returns any previously equipped item)
+        await equipmentQueries.equipItem(player.characterId, slot, itemKey);
+
+        // If there was something in that slot, put it back in inventory
+        const oldItem = player.equipment[slot];
+        if (oldItem) {
+            player.inventory.push({ item_key: oldItem, quantity: 1 });
+        }
+
+        // Remove new item from inventory
+        const idx = player.inventory.findIndex(i => i.item_key === itemKey);
+        if (idx !== -1) player.inventory.splice(idx, 1);
+
+        // Update equipment map
+        player.equipment[slot] = itemKey;
+        player.recalculateStats();
+        player.dirty = true;
+
+        // Notify the player
+        player.send({
+            type: 'equipmentChanged',
+            characterId: player.characterId,
+            equipment: player.equipment,
+        });
+        player.send({
+            type: 'playerStats',
+            ...player.toSelfData(),
+        });
+
+        // Notify other players of visual change
+        world.broadcastExcept(player.socketId, {
+            type: 'equipmentChanged',
+            characterId: player.characterId,
+            equipment: player.equipment,
+        });
+    } catch (err) {
+        console.error('[Equip] Error:', err);
+        player.send({ type: 'error', message: 'Failed to equip item' });
+    }
+}
+
+async function handleUnequipItem(world, player, message) {
+    const { slot } = message;
+
+    if (!slot) {
+        player.send({ type: 'error', message: 'slot required' });
+        return;
+    }
+
+    const itemKey = player.equipment[slot];
+    if (!itemKey) {
+        player.send({ type: 'error', message: 'Nothing equipped in that slot' });
+        return;
+    }
+
+    try {
+        await equipmentQueries.unequipItem(player.characterId, slot);
+
+        // Move item back to inventory
+        player.inventory.push({ item_key: itemKey, quantity: 1 });
+        delete player.equipment[slot];
+        player.recalculateStats();
+        player.dirty = true;
+
+        // Notify the player
+        player.send({
+            type: 'equipmentChanged',
+            characterId: player.characterId,
+            equipment: player.equipment,
+        });
+        player.send({
+            type: 'playerStats',
+            ...player.toSelfData(),
+        });
+
+        // Notify other players of visual change
+        world.broadcastExcept(player.socketId, {
+            type: 'equipmentChanged',
+            characterId: player.characterId,
+            equipment: player.equipment,
+        });
+    } catch (err) {
+        console.error('[Unequip] Error:', err);
+        player.send({ type: 'error', message: 'Failed to unequip item' });
+    }
 }
 
 module.exports = { createWebSocketServer };

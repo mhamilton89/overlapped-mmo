@@ -1,4 +1,5 @@
 const { getTotalStats, calculateDerivedStats, checkLevelUp } = require('../utils/stats');
+const equipmentRegistry = require('../registries/equipmentRegistry');
 const config = require('../config');
 
 class Player {
@@ -54,10 +55,16 @@ class Player {
     }
 
     recalculateStats() {
-        // Sum equipment bonuses
+        // Sum equipment bonuses from registry
         const equipBonuses = {};
-        // TODO: Look up equipment stats from equipmentRegistry when implemented
-        // For now, no equipment bonuses
+        for (const itemKey of Object.values(this.equipment)) {
+            const def = equipmentRegistry[itemKey];
+            if (def && def.stats) {
+                for (const [stat, val] of Object.entries(def.stats)) {
+                    equipBonuses[stat] = (equipBonuses[stat] || 0) + val;
+                }
+            }
+        }
 
         const totalStats = getTotalStats(this.class, this.level, equipBonuses);
         const derived = calculateDerivedStats(totalStats, this.level);
@@ -158,6 +165,7 @@ class Player {
             rotation: this.rotation,
             hp: this.currentHp,
             maxHp: this.maxHp,
+            equipment: this.equipment,
         };
     }
 
