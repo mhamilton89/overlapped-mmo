@@ -170,6 +170,29 @@ export class CharacterModel {
      * Equip armor on a slot. armorDef comes from armorVisuals registry.
      * Each armorDef has: { slot, pieces: [{ target, size, offset, color, metalness, roughness }] }
      */
+    /**
+     * Create geometry from a piece definition.
+     * Supports: box (default), sphere, cylinder, cone
+     */
+    _createGeo(piece) {
+        const g = piece.geo;
+        if (!g) {
+            // Backwards-compatible: use piece.size as box dimensions
+            return new THREE.BoxGeometry(piece.size[0], piece.size[1], piece.size[2]);
+        }
+        switch (g.type) {
+            case 'sphere':
+                return new THREE.SphereGeometry(g.radius, g.wSeg ?? 12, g.hSeg ?? 8);
+            case 'cylinder':
+                return new THREE.CylinderGeometry(g.rTop, g.rBot, g.h, g.seg ?? 12);
+            case 'cone':
+                return new THREE.ConeGeometry(g.radius, g.height, g.seg ?? 10);
+            case 'box':
+            default:
+                return new THREE.BoxGeometry(g.size[0], g.size[1], g.size[2]);
+        }
+    }
+
     equipArmor(slot, armorDef) {
         // Remove existing armor in this slot
         this.unequipArmor(slot);
@@ -185,7 +208,7 @@ export class CharacterModel {
                 metalness: piece.metalness ?? 0.6,
             });
 
-            const geo = new THREE.BoxGeometry(piece.size[0], piece.size[1], piece.size[2]);
+            const geo = this._createGeo(piece);
             const mesh = new THREE.Mesh(geo, mat);
 
             // Position the overlay relative to the body part it covers
@@ -197,6 +220,11 @@ export class CharacterModel {
                 mesh.position.x += piece.offset[0] || 0;
                 mesh.position.y += piece.offset[1] || 0;
                 mesh.position.z += piece.offset[2] || 0;
+            }
+            if (piece.rotation) {
+                mesh.rotation.x = piece.rotation[0] || 0;
+                mesh.rotation.y = piece.rotation[1] || 0;
+                mesh.rotation.z = piece.rotation[2] || 0;
             }
             mesh.castShadow = true;
 
