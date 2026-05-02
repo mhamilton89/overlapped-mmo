@@ -312,7 +312,16 @@ export class CharacterModel {
                 let material;
                 const isBox = !piece.geo || piece.geo.type === 'box';
                 if (isBox && Array.isArray(piece.faceColors) && piece.faceColors.length === 6) {
-                    material = piece.faceColors.map(c => new THREE.MeshStandardMaterial({ ...matOpts, color: c }));
+                    const glowMask = Array.isArray(piece.glowFaces) && piece.glowFaces.length === 6
+                        ? piece.glowFaces : null;
+                    material = piece.faceColors.map((c, i) => {
+                        const opts = { ...matOpts, color: c };
+                        if (glowMask && !glowMask[i]) {
+                            opts.emissive = 0x000000;
+                            opts.emissiveIntensity = 0;
+                        }
+                        return new THREE.MeshStandardMaterial(opts);
+                    });
                 } else {
                     material = new THREE.MeshStandardMaterial({ ...matOpts, color: piece.color });
                 }

@@ -1837,6 +1837,9 @@ export class VoxelDesigner {
             }
             if (obj.type === 'box' && Array.isArray(obj.material.faceColors) && obj.material.faceColors.length === 6) {
                 piece.faceColors = obj.material.faceColors.map(c => (c[0] << 16) | (c[1] << 8) | c[2]);
+                if (Array.isArray(obj.material.glowFaces) && obj.material.glowFaces.length === 6) {
+                    piece.glowFaces = obj.material.glowFaces.slice();
+                }
             }
             switch (obj.type) {
                 case 'box':

@@ -22,7 +22,8 @@ const DEFAULT_MATERIAL = {
     roughness: 0.4,
     emissive: [0, 0, 0],
     emissiveIntensity: 0,
-    faceColors: null, // null OR [r,g,b][6] — only respected for box
+    faceColors: null,  // null OR [r,g,b][6] — only respected for box
+    glowFaces: null,   // null OR bool[6] — which faces apply the emissive (box only)
 };
 
 export { SHAPE_DEFAULTS, DEFAULT_MATERIAL };
@@ -117,6 +118,9 @@ export class ObjectModel {
         const clonedMat = { ...src.material };
         if (Array.isArray(src.material.faceColors)) {
             clonedMat.faceColors = src.material.faceColors.map(c => c.slice());
+        }
+        if (Array.isArray(src.material.glowFaces)) {
+            clonedMat.glowFaces = src.material.glowFaces.slice();
         }
         if (Array.isArray(src.material.emissive)) clonedMat.emissive = src.material.emissive.slice();
         return this.add(src.type, {

@@ -725,6 +725,38 @@ export class DesignerUI {
                     faceGrid.appendChild(btn);
                 }
                 container.appendChild(faceGrid);
+
+                // Per-face glow toggles (which faces apply the Emissive above)
+                const glowHint = document.createElement('div');
+                glowHint.className = 'vd-info';
+                glowHint.style.opacity = '0.7';
+                glowHint.style.fontSize = '10px';
+                glowHint.style.marginTop = '4px';
+                glowHint.textContent = 'Glow faces (apply emissive to selected faces only):';
+                container.appendChild(glowHint);
+
+                const glowMask = Array.isArray(objDef.material.glowFaces) && objDef.material.glowFaces.length === 6
+                    ? objDef.material.glowFaces
+                    : [true, true, true, true, true, true];
+                const glowGrid = document.createElement('div');
+                glowGrid.className = 'vd-shape-row';
+                for (let i = 0; i < 6; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'vd-shape-btn' + (glowMask[i] ? ' active' : '');
+                    btn.style.fontSize = '9px';
+                    btn.title = `Toggle glow on ${FACE_LABELS[i]}`;
+                    btn.textContent = (glowMask[i] ? '☀ ' : '') + FACE_LABELS[i].split(' ')[0];
+                    btn.addEventListener('click', () => {
+                        const next = glowMask.slice();
+                        next[i] = !next[i];
+                        // If all true, store null to mean "uniform glow" (keeps the schema lean)
+                        const isUniform = next.every(Boolean);
+                        this.designer.objUpdateMaterial(id, { glowFaces: isUniform ? null : next });
+                        this.updateObjectSelection(id, this.designer.objectModel.get(id));
+                    });
+                    glowGrid.appendChild(btn);
+                }
+                container.appendChild(glowGrid);
             }
         }
 

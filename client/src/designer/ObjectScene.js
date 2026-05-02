@@ -442,22 +442,29 @@ export class ObjectScene {
     _createMaterial(matDef, mirror = false, type = null) {
         // Per-face materials only apply to box (BoxGeometry has 6 face groups).
         if (type === 'box' && Array.isArray(matDef.faceColors) && matDef.faceColors.length === 6) {
-            return matDef.faceColors.map(c => this._buildStandardMat(c, matDef, mirror));
+            const glowMask = Array.isArray(matDef.glowFaces) && matDef.glowFaces.length === 6
+                ? matDef.glowFaces
+                : null;
+            return matDef.faceColors.map((c, i) => {
+                // glowMask null = uniform emissive; glowMask present = only true faces glow
+                const emit = glowMask ? glowMask[i] : true;
+                return this._buildStandardMat(c, matDef, mirror, emit);
+            });
         }
-        return this._buildStandardMat(matDef.color, matDef, mirror);
+        return this._buildStandardMat(matDef.color, matDef, mirror, true);
     }
 
-    _buildStandardMat(color, matDef, mirror) {
+    _buildStandardMat(color, matDef, mirror, emit = true) {
         const [r, g, b] = color;
-        const er = matDef.emissive?.[0] ?? 0;
-        const eg = matDef.emissive?.[1] ?? 0;
-        const eb = matDef.emissive?.[2] ?? 0;
+        const er = emit ? (matDef.emissive?.[0] ?? 0) : 0;
+        const eg = emit ? (matDef.emissive?.[1] ?? 0) : 0;
+        const eb = emit ? (matDef.emissive?.[2] ?? 0) : 0;
         return new THREE.MeshStandardMaterial({
             color: new THREE.Color(r / 255, g / 255, b / 255),
             metalness: matDef.metalness ?? 0.6,
             roughness: matDef.roughness ?? 0.4,
             emissive: new THREE.Color(er / 255, eg / 255, eb / 255),
-            emissiveIntensity: matDef.emissiveIntensity ?? 0,
+            emissiveIntensity: emit ? (matDef.emissiveIntensity ?? 0) : 0,
             side: mirror ? THREE.DoubleSide : THREE.FrontSide,
         });
     }
