@@ -1,14 +1,35 @@
 // All item definitions - referenced by item_key in inventory/equipment
 module.exports = {
-    // Gathering materials
+    // Gathering materials (legacy)
     oak_wood: { name: 'Oak Wood', type: 'material', stackable: true, maxStack: 99, description: 'Sturdy wood from an oak tree' },
     iron_ore: { name: 'Iron Ore', type: 'material', stackable: true, maxStack: 99, description: 'Raw iron ore' },
 
-    // Enemy drops
+    // Dark Forest gathering
+    dead_wood: { name: 'Dead Wood', type: 'material', stackable: true, maxStack: 99, description: 'Gnarled wood from a dead tree' },
+    glowing_mushroom: { name: 'Glowing Mushroom', type: 'material', stackable: true, maxStack: 99, description: 'A faintly glowing fungus' },
+    luminescent_cap: { name: 'Luminescent Cap', type: 'material', stackable: true, maxStack: 30, description: 'A rare mushroom cap that pulses with light' },
+    grave_dirt: { name: 'Grave Dirt', type: 'material', stackable: true, maxStack: 99, description: 'Dark soil from an ancient grave' },
+    ancient_bone: { name: 'Ancient Bone', type: 'material', stackable: true, maxStack: 30, description: 'A bone from something long buried' },
+
+    // Enemy drops (forest)
     wolf_pelt: { name: 'Wolf Pelt', type: 'material', stackable: true, maxStack: 99, description: 'Fur from a forest wolf' },
     wolf_fang: { name: 'Wolf Fang', type: 'material', stackable: true, maxStack: 99, description: 'A sharp fang from a wolf' },
     boar_tusk: { name: 'Boar Tusk', type: 'material', stackable: true, maxStack: 99, description: 'A sharp tusk from a forest boar' },
     boar_hide: { name: 'Boar Hide', type: 'material', stackable: true, maxStack: 99, description: 'Tough hide from a forest boar' },
+
+    // Enemy drops (Dark Forest)
+    bone_fragment: { name: 'Bone Fragment', type: 'material', stackable: true, maxStack: 99, description: 'A splintered piece of bone' },
+    tattered_cloth: { name: 'Tattered Cloth', type: 'material', stackable: true, maxStack: 99, description: 'Ragged fabric from the undead' },
+    spider_silk: { name: 'Spider Silk', type: 'material', stackable: true, maxStack: 99, description: 'Strong silk from a giant spider' },
+    venom_sac: { name: 'Venom Sac', type: 'material', stackable: true, maxStack: 30, description: 'A bulging sac of spider venom' },
+    rotting_flesh: { name: 'Rotting Flesh', type: 'material', stackable: true, maxStack: 99, description: 'Decaying flesh from a zombie' },
+    zombie_tooth: { name: 'Zombie Tooth', type: 'material', stackable: true, maxStack: 99, description: 'A yellowed tooth ripped from a zombie' },
+    shadow_essence: { name: 'Shadow Essence', type: 'material', stackable: true, maxStack: 30, description: 'A wisp of condensed darkness' },
+    spectral_dust: { name: 'Spectral Dust', type: 'material', stackable: true, maxStack: 99, description: 'Glimmering dust left by a wraith' },
+    wraith_cloth: { name: 'Wraith Cloth', type: 'material', stackable: true, maxStack: 30, description: 'Ethereal fabric that phases in and out' },
+    golem_core: { name: 'Golem Core', type: 'material', stackable: true, maxStack: 10, description: 'A pulsing stone heart from a golem' },
+    enchanted_stone: { name: 'Enchanted Stone', type: 'material', stackable: true, maxStack: 30, description: 'Stone etched with glowing runes' },
+    grave_moss: { name: 'Grave Moss', type: 'material', stackable: true, maxStack: 99, description: 'Damp moss from an ancient grave' },
 
     // Head equipment
     iron_helm: { name: 'Iron Helm', type: 'equipment', stackable: false, description: 'A basic iron helmet' },

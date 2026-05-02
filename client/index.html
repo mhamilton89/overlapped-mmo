@@ -40,6 +40,12 @@
                 <span id="gather-text">Gathering...</span>
             </div>
 
+            <!-- Spell cast bar (bottom-center, above gather) -->
+            <div id="cast-bar" class="hidden">
+                <div id="cast-bar-fill"></div>
+                <span id="cast-bar-text">Fireball</span>
+            </div>
+
             <!-- Tooltip -->
             <div id="tooltip" class="hidden">
                 <span id="tooltip-text"></span>
@@ -60,8 +66,40 @@
                 <span id="bag-icon">&#128188;</span>
             </div>
 
+            <!-- Wardrobe button (next to bag) -->
+            <div id="wardrobe-button" title="Wardrobe — custom designs (K)">
+                <span id="wardrobe-icon">&#128088;</span>
+            </div>
+
+            <!-- Wardrobe panel (custom designs from designer) -->
+            <div id="wardrobe-panel" class="hidden">
+                <div id="wardrobe-header">
+                    <span>Wardrobe — Custom Designs</span>
+                    <button id="wardrobe-close">&times;</button>
+                </div>
+                <div id="wardrobe-list"></div>
+            </div>
+
             <!-- Floating loot text container -->
             <div id="loot-popups"></div>
+
+            <!-- Crosshair (center screen, editor mode) -->
+            <div id="crosshair" class="hidden">+</div>
+
+            <!-- Cursor-following aim reticle (combat) -->
+            <div id="aim-reticle" class="idle"></div>
+
+            <!-- Action bar (bottom center, spells) -->
+            <div id="action-bar"></div>
+
+            <!-- Editor hotbar (bottom center) -->
+            <div id="editor-hotbar" class="hidden"></div>
+
+            <!-- Block palette (left side, toggle Tab) -->
+            <div id="block-palette" class="hidden"></div>
+
+            <!-- Asset/structure palette (left side, toggle Tab in asset mode) -->
+            <div id="asset-palette" class="hidden"></div>
 
             <!-- Debug info (top-right) -->
             <div id="debug-info">

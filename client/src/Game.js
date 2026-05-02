@@ -1,13 +1,19 @@
 import * as THREE from 'three';
-import { Terrain } from './world/Terrain.js';
-import { TreeManager } from './world/TreeManager.js';
+import { ChunkManager } from './world/blocks/ChunkManager.js';
+import { FlatWorldGenerator } from './world/blocks/FlatWorldGenerator.js';
 import { Skybox } from './world/Skybox.js';
+import { AtmosphericEffects } from './world/AtmosphericEffects.js';
+import { EditorSystem } from './editor/EditorSystem.js';
 import { Player } from './entities/Player.js';
 import { OtherPlayer } from './entities/OtherPlayer.js';
 import { InputManager } from './controls/InputManager.js';
 import { CameraController } from './controls/CameraController.js';
 import { WebSocketClient } from './networking/WebSocketClient.js';
 import { EnemyManager } from './entities/EnemyManager.js';
+import { createPostFX } from './rendering/PostFX.js';
+import { GrassBillboards } from './world/GrassBillboards.js';
+import { stampStarterTown } from './world/StarterTown.js';
+import { SPELLS, ACTION_BAR } from './combat/Spells.js';
 
 const GATHER_INTERACT_RANGE = 5;
 
@@ -19,8 +25,8 @@ export class Game {
         this.clock = new THREE.Clock();
 
         // Modules
-        this.terrain = null;
-        this.treeManager = null;
+        this.chunkManager = null;
+        this.terrainGenerator = null;
         this.skybox = null;
         this.player = null;
         this.inputManager = null;
@@ -40,9 +46,20 @@ export class Game {
         this.isDead = false;
         this.raycaster = new THREE.Raycaster();
         this.mouseVec = new THREE.Vector2();
+        this.mousePx = { x: -9999, y: -9999, inside: false };
+        this.hoveredEnemyMesh = null;
+        this.aimReticleEl = null;
         this.damageNumbers = [];
         this.lastCombatTime = 0;  // timestamp of last combat action
         this.regenCooldown = 3;   // seconds out of combat before regen starts
+
+        // Spell casting
+        this.isCasting = false;
+        this.castingSpellId = null;
+        this.projectiles = [];
+        this.castBarEl = null;
+        this.castBarFillEl = null;
+        this.castBarTextEl = null;
 
         // Target frame UI
         this.targetFrame = document.getElementById('target-frame');
@@ -90,6 +107,23 @@ export class Game {
         this.inventoryOpen = false;
         this.inventory = new Map(); // key → { key, name, icon, quantity }
 
+        // Cast bar UI
+        this.castBarEl = document.getElementById('cast-bar');
+        this.castBarFillEl = document.getElementById('cast-bar-fill');
+        this.castBarTextEl = document.getElementById('cast-bar-text');
+
+        // Action bar + digit hotkeys for spells
+        this._buildActionBar();
+        window.addEventListener('keydown', (e) => {
+            if (!e.code.startsWith('Digit')) return;
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+            const slot = parseInt(e.code.slice(5), 10);
+            const spell = ACTION_BAR[slot - 1];
+            if (spell) this.startCast(spell.id);
+        });
+
         // Inventory toggle via bag button and close button
         document.getElementById('bag-button').addEventListener('click', () => this.toggleInventory());
         document.getElementById('inventory-close').addEventListener('click', () => this.toggleInventory(false));
@@ -102,6 +136,103 @@ export class Game {
                 this.toggleInventory();
             }
         });
+
+        // Wardrobe (custom designed equipment)
+        this.wardrobePanel = document.getElementById('wardrobe-panel');
+        this.wardrobeListEl = document.getElementById('wardrobe-list');
+        this.wardrobeOpen = false;
+        this._equippedCustoms = this._loadEquippedCustoms(); // { slot -> customKey }
+        document.getElementById('wardrobe-button').addEventListener('click', () => this.toggleWardrobe());
+        document.getElementById('wardrobe-close').addEventListener('click', () => this.toggleWardrobe(false));
+        window.addEventListener('keydown', (e) => {
+            if (e.code !== 'KeyU') return;
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+            this.toggleWardrobe();
+        });
+
+        // === RENDER DIAGNOSTICS ===
+        // M: cycle material (Basic / Lambert / Standard)
+        // L: cycle lighting presets
+        // J: dump current render state to console
+        // K: toggle fog on/off
+        window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+            if (e.ctrlKey || e.altKey) return;
+
+            if (e.code === 'KeyM' && this.chunkManager) {
+                const mode = this.chunkManager.cycleMaterial();
+                this._showDiagMsg(`Material: ${mode}`);
+            } else if (e.code === 'KeyL') {
+                this._cycleLightingPreset();
+            } else if (e.code === 'KeyJ') {
+                this._dumpRenderState();
+            } else if (e.code === 'KeyK') {
+                if (this.scene.fog) {
+                    this._savedFog = this.scene.fog;
+                    this.scene.fog = null;
+                    this._showDiagMsg('Fog: OFF');
+                } else if (this._savedFog) {
+                    this.scene.fog = this._savedFog;
+                    this._showDiagMsg('Fog: ON');
+                }
+            }
+        });
+    }
+
+    _showDiagMsg(text) {
+        let el = document.getElementById('diag-msg');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'diag-msg';
+            el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);color:#fff;padding:12px 20px;font-family:monospace;font-size:16px;border:2px solid #ffd700;border-radius:6px;z-index:9999;pointer-events:none;';
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.opacity = '1';
+        clearTimeout(this._diagMsgTimer);
+        this._diagMsgTimer = setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 1500);
+    }
+
+    _cycleLightingPreset() {
+        this._lightingPreset = ((this._lightingPreset || 0) + 1) % 4;
+        const presets = [
+            { name: 'default',   amb: 0.5,  hemi: 0.35, sun: 0.85 },
+            { name: 'bright',    amb: 0.8,  hemi: 0.5,  sun: 1.2  },
+            { name: 'very-bright', amb: 1.0, hemi: 0.7, sun: 1.5 },
+            { name: 'flat-max',  amb: 1.5,  hemi: 0.0,  sun: 0.0 },
+        ];
+        const p = presets[this._lightingPreset];
+        if (this.ambientLight) this.ambientLight.intensity = p.amb;
+        if (this.hemiLight) this.hemiLight.intensity = p.hemi;
+        if (this.sun) this.sun.intensity = p.sun;
+        this._showDiagMsg(`Lights: ${p.name} (amb=${p.amb} hemi=${p.hemi} sun=${p.sun})`);
+    }
+
+    _dumpRenderState() {
+        const r = this.renderer;
+        const info = {
+            toneMapping: r.toneMapping,
+            toneMappingExposure: r.toneMappingExposure,
+            outputColorSpace: r.outputColorSpace,
+            pixelRatio: r.getPixelRatio(),
+            shadowMap: r.shadowMap.enabled,
+            sceneBackground: this.scene.background,
+            sceneFog: this.scene.fog ? { type: this.scene.fog.constructor.name, color: this.scene.fog.color?.getHexString(), density: this.scene.fog.density } : null,
+            lights: {
+                ambient: this.ambientLight?.intensity,
+                hemi: this.hemiLight?.intensity,
+                sun: this.sun?.intensity,
+                sunPos: this.sun ? [this.sun.position.x, this.sun.position.y, this.sun.position.z] : null,
+            },
+            chunkMeshStats: this.chunkManager?._lastMeshStats,
+            materialMode: this.chunkManager?.materialModes[this.chunkManager.materialModeIndex],
+            cameraPos: [this.camera.position.x.toFixed(1), this.camera.position.y.toFixed(1), this.camera.position.z.toFixed(1)],
+        };
+        console.log('=== RENDER STATE ===', info);
+        this._showDiagMsg('Render state dumped to console (F12)');
     }
 
     async init() {
@@ -117,19 +248,27 @@ export class Game {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.0;
+        // NoToneMapping keeps vertex colors at their literal brightness —
+        // critical for a bright voxel look. ACES was crushing midtones.
+        this.renderer.toneMapping = THREE.NoToneMapping;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         // Scene
         this.scene = new THREE.Scene();
+        // Soft atmospheric haze — color matches Skybox.js horizon (pale blue)
+        // so distant terrain fades into the sky, not into a gray wall.
+        this.scene.fog = new THREE.FogExp2(0xbfdeff, 0.008);
 
         // Camera
         this.camera = new THREE.PerspectiveCamera(
             60,
             window.innerWidth / window.innerHeight,
             0.1,
-            500
+            1000
         );
+
+        // Post-processing composer (bloom + FXAA + outline)
+        this.postfx = createPostFX(this.renderer, this.scene, this.camera);
 
         // Handle resize
         window.addEventListener('resize', () => this.onResize());
@@ -142,23 +281,42 @@ export class Game {
         // Skybox
         this.skybox = new Skybox(this.scene);
 
-        this.updateLoading(0.1, 'Creating terrain...');
+        this.updateLoading(0.1, 'Building world...');
 
-        // Terrain
-        this.terrain = new Terrain(this.scene);
+        // Block-based voxel world (flat canvas for editor)
+        this.worldGenerator = new FlatWorldGenerator();
+        this.chunkManager = new ChunkManager(this.scene, this.worldGenerator);
 
-        this.updateLoading(0.15, 'Loading trees...');
+        // Pre-load chunks around spawn so terrain is ready before player appears
+        this.chunkManager.update(new THREE.Vector3(0, 21, 0));
 
-        // Trees
-        this.treeManager = new TreeManager(this.scene);
-        await this.treeManager.init((progress) => {
-            this.updateLoading(0.15 + progress * 0.55, `Loading trees... ${Math.floor(progress * 100)}%`);
-        });
+        // Decorative grass tufts on grass blocks near player
+        this.grassBillboards = new GrassBillboards(this.scene, this.chunkManager);
 
-        this.updateLoading(0.7, 'Placing trees...');
+        // === DIAGNOSTIC REFERENCE CUBES ===
+        // Three side-by-side cubes that should look BRIGHT GREEN no matter what.
+        // If they look dark, the problem is gamma/colorspace/tonemapping.
+        // If they look bright but chunks don't, problem is our mesher/vertexColors.
+        const refBasic = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshBasicMaterial({ color: 0x44ff44 })  // Basic: ignores lights
+        );
+        refBasic.position.set(3, 22.5, 3);
+        this.scene.add(refBasic);
 
-        // Scatter decorative trees
-        this.treeManager.scatterTrees(200, 512, 15);
+        const refLambert = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshLambertMaterial({ color: 0x44ff44 })  // Lambert: uses lights
+        );
+        refLambert.position.set(5, 22.5, 3);
+        this.scene.add(refLambert);
+
+        const refStandard = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshStandardMaterial({ color: 0x44ff44, roughness: 0.9 })
+        );
+        refStandard.position.set(7, 22.5, 3);
+        this.scene.add(refStandard);
 
         this.updateLoading(0.72, 'Loading enemies...');
 
@@ -168,12 +326,35 @@ export class Game {
             this.updateLoading(0.72 + progress * 0.03, `Loading enemies... ${Math.floor(progress * 100)}%`);
         });
 
+        this.updateLoading(0.82, 'Summoning atmosphere...');
+
+        // Atmospheric particles
+        this.atmosphericEffects = new AtmosphericEffects(this.scene);
+
+        // World editor (enabled when admin)
+        this.editorSystem = new EditorSystem(this);
+
         // Input
         this.inputManager = new InputManager();
 
         // Left-click targeting
         this.renderer.domElement.addEventListener('mousedown', (e) => {
             if (e.button === 0) this.handleLeftClick(e);
+        });
+
+        // Cursor-following aim reticle
+        this.aimReticleEl = document.getElementById('aim-reticle');
+        window.addEventListener('mousemove', (e) => {
+            this.mousePx.x = e.clientX;
+            this.mousePx.y = e.clientY;
+            this.mousePx.inside = true;
+            if (this.aimReticleEl) {
+                this.aimReticleEl.style.transform =
+                    `translate(${e.clientX}px, ${e.clientY}px)`;
+            }
+        });
+        window.addEventListener('mouseout', (e) => {
+            if (!e.relatedTarget) this.mousePx.inside = false;
         });
 
         // Respawn button
@@ -210,8 +391,9 @@ export class Game {
 
     setupCollisions() {
         if (!this.player) return;
-        // Give the player all tree root objects for collision
-        this.player.collisionObjects = this.treeManager.trees;
+        // Block-based collision will be handled by VoxelCollision (Phase 3)
+        // For now, pass chunkManager reference for ground height queries
+        this.player.chunkManager = this.chunkManager;
     }
 
     async connectToServer() {
@@ -223,8 +405,33 @@ export class Game {
                 )
             ]);
         } catch (err) {
-            console.error('Failed to connect to server:', err.message);
-            this.updateLoading(0, 'Cannot connect to server. Please start the server and refresh.');
+            console.warn('Server not available, running in offline editor mode:', err.message);
+            // Offline mode: spawn local player and enable editor
+            this._startOfflineMode();
+        }
+    }
+
+    _startOfflineMode() {
+        if (this.chunkManager) {
+            stampStarterTown(this.chunkManager);
+        }
+
+        this.player = new Player(this.scene, { class: 'Warrior' });
+        this.player.mesh.position.set(0, 21, 0);
+        this.player.chunkManager = this.chunkManager;
+
+        this.cameraController = new CameraController(this.camera, this.renderer.domElement);
+        this.cameraController.target = this.player.mesh;
+        this.cameraController.currentPosition.set(0, 33, 12);
+
+        this.updatePlayerHUD({ name: 'Editor', hp: 100, maxHp: 100, mana: 100, maxMana: 100, level: 1 });
+
+        // Re-apply any persisted custom equipment
+        this._applyEquippedCustoms();
+
+        // Enable editor in offline mode
+        if (this.editorSystem) {
+            this.editorSystem.setEnabled(true);
         }
     }
 
@@ -269,6 +476,13 @@ export class Game {
         await this.wsClient.connect(token);
         this.connected = true;
 
+        // Give ChunkManager access to wsClient for requesting chunk deltas
+        // Also request deltas for chunks that were pre-loaded before connection
+        if (this.chunkManager) {
+            this.chunkManager.wsClient = this.wsClient;
+            this.chunkManager.requestAllChunkDeltas();
+        }
+
         this.wsClient.selectCharacter(characterId);
     }
 
@@ -312,16 +526,23 @@ export class Game {
                 y: data.character.y,
                 equipment: data.equipment || {},
             });
-            this.player.mesh.position.set(data.character.x, 1, data.character.y);
+            const spawnY = this.chunkManager.getGroundHeight(
+                Math.floor(data.character.x),
+                Math.floor(data.character.y)
+            );
+            this.player.mesh.position.set(data.character.x, spawnY, data.character.y);
 
             // Camera
             this.cameraController = new CameraController(this.camera, this.renderer.domElement);
             this.cameraController.target = this.player.mesh;
             this.cameraController.currentPosition.set(
-                data.character.x, 12, data.character.y + 12
+                data.character.x, spawnY + 11, data.character.y + 12
             );
 
             this.updatePlayerHUD(data.character);
+
+            // Re-apply any persisted custom equipment on top of server equipment
+            this._applyEquippedCustoms();
 
             // Check if player loaded in dead (0 HP from previous session)
             if (data.character.hp <= 0) {
@@ -332,11 +553,9 @@ export class Game {
                 if (deathScreen) deathScreen.classList.remove('hidden');
             }
 
-            // Place gatherable trees from server data
-            if (data.resources) {
-                for (const res of data.resources) {
-                    this.treeManager.placeTree(res.x, res.y, res);
-                }
+            // Enable editor if admin
+            if (data.character.isAdmin && this.editorSystem) {
+                this.editorSystem.setEnabled(true);
             }
 
             // Spawn existing players
@@ -383,13 +602,22 @@ export class Game {
             }
         });
 
-        this.wsClient.on('resourceDepleted', (data) => {
-            this.treeManager.setAvailability(data.resourceId, false);
+        // Block updates from other players / server
+        this.wsClient.on('blockUpdate', (data) => {
+            if (this.chunkManager) {
+                this.chunkManager.setBlock(data.x, data.y, data.z, data.blockId);
+            }
         });
 
-        this.wsClient.on('resourceRespawned', (data) => {
-            this.treeManager.setAvailability(data.resourceId, true);
+        // Chunk deltas (persisted block changes) from server
+        this.wsClient.on('chunkDeltas', (data) => {
+            if (this.chunkManager) {
+                this.chunkManager.applyChunkDeltas(data.cx, data.cy, data.cz, data.deltas);
+            }
         });
+
+        this.wsClient.on('resourceDepleted', (data) => {});
+        this.wsClient.on('resourceRespawned', (data) => {});
 
         // Gathering handlers — server overrides local progress
         this.wsClient.on('gatherProgress', (data) => {
@@ -514,7 +742,10 @@ export class Game {
             const deathScreen = document.getElementById('death-screen');
             if (deathScreen) deathScreen.classList.add('hidden');
             if (this.player) {
-                this.player.mesh.position.set(data.x, 1, data.y);
+                const ry = this.chunkManager.getGroundHeight(
+                    Math.floor(data.x), Math.floor(data.y)
+                );
+                this.player.mesh.position.set(data.x, ry, data.y);
             }
             this.clearTarget();
         });
@@ -545,27 +776,8 @@ export class Game {
     // ========== INTERACTION / GATHERING ==========
 
     findNearestGatherableTree() {
-        if (!this.player) return null;
-
-        const px = this.player.mesh.position.x;
-        const pz = this.player.mesh.position.z;
-        let nearest = null;
-        let nearestDist = GATHER_INTERACT_RANGE;
-
-        for (const tree of this.treeManager.trees) {
-            if (!tree.userData.gatherable || !tree.userData.available) continue;
-
-            const dx = px - tree.position.x;
-            const dz = pz - tree.position.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-
-            if (dist < nearestDist) {
-                nearestDist = dist;
-                nearest = tree;
-            }
-        }
-
-        return nearest;
+        // TODO Phase 8: block-based gathering replaces tree-based gathering
+        return null;
     }
 
     updateInteraction() {
@@ -631,18 +843,10 @@ export class Game {
             this.hideGatherProgress();
             this.player.model.setChopping(false);
 
+            // TODO Phase 8: block-based gathering
             if (tree) {
-                this.treeManager.fellTree(tree.userData.resourceId);
-
-                // Always give items locally
                 const qty = 3 + Math.floor(Math.random() * 5);
                 this.addItem('oak_wood', 'Oak Wood', qty);
-
-                // Respawn after 2 minutes
-                const resId = tree.userData.resourceId;
-                setTimeout(() => {
-                    this.treeManager.respawnTree(resId);
-                }, 120000);
             }
         }
     }
@@ -779,9 +983,146 @@ export class Game {
         }
     }
 
+    // ========== WARDROBE (custom-designed equipment) ==========
+
+    toggleWardrobe(forceState) {
+        this.wardrobeOpen = forceState !== undefined ? forceState : !this.wardrobeOpen;
+        if (this.wardrobeOpen) {
+            this.wardrobePanel.classList.remove('hidden');
+            this.renderWardrobe();
+        } else {
+            this.wardrobePanel.classList.add('hidden');
+        }
+    }
+
+    _loadCustomEquipmentMap() {
+        try {
+            return JSON.parse(localStorage.getItem('custom_equipment') || '{}');
+        } catch {
+            return {};
+        }
+    }
+
+    _loadEquippedCustoms() {
+        try {
+            return JSON.parse(localStorage.getItem('equipped_customs') || '{}');
+        } catch {
+            return {};
+        }
+    }
+
+    _saveEquippedCustoms() {
+        localStorage.setItem('equipped_customs', JSON.stringify(this._equippedCustoms));
+    }
+
+    _applyEquippedCustoms() {
+        if (!this.player?.model) return;
+        const customs = this._loadCustomEquipmentMap();
+        for (const [slot, customKey] of Object.entries(this._equippedCustoms)) {
+            const entry = customs[customKey];
+            if (!entry?.def) continue;
+            this.player.model.equipArmor(slot, entry.def);
+        }
+    }
+
+    equipCustom(customKey) {
+        if (!this.player?.model) return;
+        const customs = this._loadCustomEquipmentMap();
+        const entry = customs[customKey];
+        if (!entry?.def?.slot) return;
+        const slot = entry.def.slot;
+        this._equippedCustoms[slot] = customKey;
+        this._saveEquippedCustoms();
+        this.player.model.equipArmor(slot, entry.def);
+        if (this.wardrobeOpen) this.renderWardrobe();
+    }
+
+    unequipCustom(slot) {
+        if (!this.player?.model) return;
+        if (!this._equippedCustoms[slot]) return;
+        delete this._equippedCustoms[slot];
+        this._saveEquippedCustoms();
+        this.player.model.unequipArmor(slot);
+        if (this.wardrobeOpen) this.renderWardrobe();
+    }
+
+    deleteCustom(customKey) {
+        const customs = this._loadCustomEquipmentMap();
+        const entry = customs[customKey];
+        if (!entry) return;
+        // Unequip first if currently equipped
+        for (const [slot, k] of Object.entries(this._equippedCustoms)) {
+            if (k === customKey) this.unequipCustom(slot);
+        }
+        delete customs[customKey];
+        localStorage.setItem('custom_equipment', JSON.stringify(customs));
+        if (this.wardrobeOpen) this.renderWardrobe();
+    }
+
+    renderWardrobe() {
+        const list = this.wardrobeListEl;
+        list.innerHTML = '';
+        const customs = this._loadCustomEquipmentMap();
+        const entries = Object.entries(customs);
+        if (entries.length === 0) {
+            list.innerHTML = '<div class="ward-empty">No custom designs yet.<br>Open the designer (N in editor mode) to author one.</div>';
+            return;
+        }
+        const SLOT_ORDER = ['head', 'chest', 'legs', 'feet', 'hands', 'main_hand', 'off_hand'];
+        const SLOT_LABELS = {
+            head: 'Head', chest: 'Chest', legs: 'Legs', feet: 'Feet',
+            hands: 'Hands', main_hand: 'Main Hand', off_hand: 'Off Hand',
+        };
+        const bySlot = {};
+        for (const [key, entry] of entries) {
+            const slot = entry?.def?.slot || 'unknown';
+            (bySlot[slot] ||= []).push({ key, entry });
+        }
+        for (const slot of SLOT_ORDER) {
+            const items = bySlot[slot];
+            if (!items?.length) continue;
+            const group = document.createElement('div');
+            group.className = 'ward-slot-group';
+            const label = document.createElement('div');
+            label.className = 'ward-slot-label';
+            label.textContent = SLOT_LABELS[slot] || slot;
+            group.appendChild(label);
+            for (const { key, entry } of items) {
+                const isEquipped = this._equippedCustoms[slot] === key;
+                const row = document.createElement('div');
+                row.className = 'ward-item' + (isEquipped ? ' equipped' : '');
+                const name = document.createElement('span');
+                name.className = 'ward-item-name';
+                name.textContent = entry.name || key;
+                row.appendChild(name);
+                const equipBtn = document.createElement('button');
+                equipBtn.className = 'ward-btn' + (isEquipped ? ' unequip' : '');
+                equipBtn.textContent = isEquipped ? 'Unequip' : 'Equip';
+                equipBtn.addEventListener('click', () => {
+                    if (isEquipped) this.unequipCustom(slot);
+                    else this.equipCustom(key);
+                });
+                row.appendChild(equipBtn);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'ward-btn delete';
+                delBtn.textContent = '×';
+                delBtn.title = 'Delete this design';
+                delBtn.addEventListener('click', () => {
+                    if (confirm(`Delete "${entry.name || key}"?`)) this.deleteCustom(key);
+                });
+                row.appendChild(delBtn);
+                group.appendChild(row);
+            }
+            list.appendChild(group);
+        }
+    }
+
     // ========== COMBAT / TARGETING ==========
 
     handleLeftClick(event) {
+        // Editor gets first pass on left-clicks (block breaking)
+        if (this.editorSystem?.consumedLeftClick()) return;
+
         if (!this.player || !this.enemyManager || this.isDead) return;
 
         this.mouseVec.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -812,6 +1153,50 @@ export class Game {
         }
 
         this.clearTarget();
+    }
+
+    _updateAimReticle() {
+        if (!this.aimReticleEl || !this.postfx) return;
+        // Hide during editor mode — editor has its own center-crosshair
+        if (this.editorSystem?.enabled) {
+            this.aimReticleEl.classList.add('hidden');
+            this.postfx.hoverOutlinePass.selectedObjects = [];
+            this.hoveredEnemyMesh = null;
+            return;
+        }
+        this.aimReticleEl.classList.remove('hidden');
+
+        let hitType = 'idle';
+        let hoveredMesh = null;
+
+        if (this.mousePx.inside && this.enemyManager && !this.isDead) {
+            this.mouseVec.x = (this.mousePx.x / window.innerWidth) * 2 - 1;
+            this.mouseVec.y = -(this.mousePx.y / window.innerHeight) * 2 + 1;
+            this.raycaster.setFromCamera(this.mouseVec, this.camera);
+
+            const enemyMeshes = this.enemyManager.getAllMeshes();
+            const hits = this.raycaster.intersectObjects(enemyMeshes, true);
+            if (hits.length > 0) {
+                const entry = this.enemyManager.findByMesh(hits[0].object);
+                if (entry && !entry.dying) {
+                    hitType = 'enemy';
+                    hoveredMesh = entry.mesh;
+                }
+            }
+            if (hitType === 'idle') {
+                const lootMeshes = this.enemyManager.getLootMeshes();
+                const lootHits = this.raycaster.intersectObjects(lootMeshes, false);
+                if (lootHits.length > 0) hitType = 'loot';
+            }
+        }
+
+        if (this.aimReticleEl.dataset.state !== hitType) {
+            this.aimReticleEl.className = hitType;
+            this.aimReticleEl.dataset.state = hitType;
+        }
+
+        this.hoveredEnemyMesh = hoveredMesh;
+        this.postfx.hoverOutlinePass.selectedObjects = hoveredMesh ? [hoveredMesh] : [];
     }
 
     selectTarget(entry) {
@@ -973,6 +1358,136 @@ export class Game {
         }
     }
 
+    // ========== Spell casting ==========
+
+    _buildActionBar() {
+        const bar = document.getElementById('action-bar');
+        if (!bar) return;
+        bar.innerHTML = '';
+        ACTION_BAR.forEach((spell, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'action-slot';
+            slot.dataset.spellId = spell.id;
+            slot.title = `${spell.name} (${i + 1})`;
+            slot.innerHTML = `
+                <span class="slot-icon">${spell.icon}</span>
+                <span class="slot-key">${i + 1}</span>
+            `;
+            slot.addEventListener('click', () => this.startCast(spell.id));
+            bar.appendChild(slot);
+        });
+    }
+
+    startCast(spellId) {
+        if (!this.player || !this.player.model) return;
+        if (this.isDead || this.isCasting || this.isGathering) return;
+        const spell = SPELLS[spellId];
+        if (!spell) return;
+
+        // Face the cursor's world point at cast-start so the projectile flies that way.
+        const aimDir = this._getCursorAimDirection();
+        if (aimDir) {
+            this.player.mesh.rotation.y = Math.atan2(aimDir.x, aimDir.z);
+        }
+
+        const started = this.player.model.triggerCast({
+            duration: spell.castDuration,
+            pose: spell.pose,
+            orbColor: spell.orbColor,
+            onComplete: () => this.spawnProjectile(spellId),
+        });
+        if (!started) return;
+
+        this.isCasting = true;
+        this.castingSpellId = spellId;
+        if (this.castBarEl) this.castBarEl.classList.remove('hidden');
+        if (this.castBarTextEl) this.castBarTextEl.textContent = spell.name;
+        if (this.castBarFillEl) {
+            this.castBarFillEl.style.background = `linear-gradient(to right, ${spell.barColor}, #fff3c0)`;
+            this.castBarFillEl.style.width = '0%';
+        }
+    }
+
+    /**
+     * Raycast from cursor screen position into the world and return a normalized
+     * horizontal direction from the player toward that point. Falls back to
+     * camera-forward if the cursor is outside the window.
+     */
+    _getCursorAimDirection() {
+        const playerPos = this.player.mesh.position;
+        const forward = new THREE.Vector3();
+
+        if (this.mousePx && this.mousePx.inside) {
+            const rect = this.renderer.domElement.getBoundingClientRect();
+            const ndc = new THREE.Vector2(
+                ((this.mousePx.x - rect.left) / rect.width) * 2 - 1,
+                -((this.mousePx.y - rect.top) / rect.height) * 2 + 1
+            );
+            this.raycaster.setFromCamera(ndc, this.camera);
+            // Intersect a horizontal plane at player chest height
+            const plane = new THREE.Plane(
+                new THREE.Vector3(0, 1, 0),
+                -(playerPos.y + 0.6)
+            );
+            const hit = new THREE.Vector3();
+            if (this.raycaster.ray.intersectPlane(plane, hit)) {
+                forward.subVectors(hit, playerPos);
+                forward.y = 0;
+                if (forward.lengthSq() > 0.001) return forward.normalize();
+            }
+        }
+
+        // Fallback: camera's horizontal forward direction
+        this.camera.getWorldDirection(forward);
+        forward.y = 0;
+        if (forward.lengthSq() < 0.001) return null;
+        return forward.normalize();
+    }
+
+    spawnProjectile(spellId) {
+        this.isCasting = false;
+        this.castingSpellId = null;
+        if (this.castBarEl) this.castBarEl.classList.add('hidden');
+
+        if (!this.player || !this.player.model) return;
+        const spell = SPELLS[spellId];
+        if (!spell) return;
+
+        const dir = this._getCursorAimDirection();
+        if (!dir) return;
+
+        // Spawn at player's chest height, slightly in front so it doesn't clip the model
+        const origin = this.player.mesh.position.clone();
+        origin.y += 0.55;
+        origin.addScaledVector(dir, 0.6);
+
+        const proj = spell.spawn(this.scene, origin, dir);
+        this.projectiles.push(proj);
+    }
+
+    updateProjectiles(deltaTime) {
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            if (!p.update(deltaTime)) {
+                p.dispose();
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    updateCastBar() {
+        if (!this.castBarFillEl || !this.player || !this.player.model) return;
+        if (!this.isCasting) return;
+        const p = this.player.model.getCastProgress();
+        this.castBarFillEl.style.width = `${(p * 100).toFixed(1)}%`;
+        // Model's own update() clears isCasting when done; keep our flag in sync
+        if (!this.player.model.isCasting) {
+            this.isCasting = false;
+            this.castingSpellId = null;
+            if (this.castBarEl) this.castBarEl.classList.add('hidden');
+        }
+    }
+
     // ========== HUD ==========
 
     updatePlayerHUD(data) {
@@ -992,14 +1507,18 @@ export class Game {
     }
 
     setupLighting() {
-        const ambient = new THREE.AmbientLight(0x404040, 0.6);
-        this.scene.add(ambient);
+        // Bright daytime balanced for NoToneMapping (sum ~= 1.0).
+        // Ambient fills shadowed faces so they stay visible but not flat.
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.scene.add(this.ambientLight);
 
-        const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x3d5c3d, 0.5);
-        this.scene.add(hemiLight);
+        // Hemisphere: sky light from above, warm ground bounce from below
+        this.hemiLight = new THREE.HemisphereLight(0xbfdeff, 0xa08060, 0.55);
+        this.scene.add(this.hemiLight);
 
-        const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
-        sun.position.set(80, 100, 50);
+        // Sunlight — gives clear directional shading on block faces
+        const sun = new THREE.DirectionalLight(0xfff4d6, 0.85);
+        sun.position.set(60, 100, 40);
         sun.castShadow = true;
 
         sun.shadow.mapSize.width = 2048;
@@ -1014,33 +1533,15 @@ export class Game {
 
         this.scene.add(sun);
         this.sun = sun;
+
+        // Player torch — subtle warm fill
+        this.playerTorch = new THREE.PointLight(0xffddaa, 0.15, 20);
+        this.playerTorch.position.set(0, 2, 0);
+        this.scene.add(this.playerTorch);
     }
 
     placeGatherableTrees() {
-        const gatherablePositions = [
-            { x: 6, z: 4 },
-            { x: -5, z: 6 },
-            { x: 7, z: -5 },
-            { x: -7, z: -6 },
-            { x: 15, z: 5 },
-            { x: -12, z: 8 },
-            { x: 8, z: -14 },
-            { x: 20, z: -5 },
-            { x: -18, z: 2 },
-            { x: 5, z: 18 },
-            { x: -5, z: -20 },
-            { x: 22, z: 15 },
-        ];
-
-        gatherablePositions.forEach((pos, i) => {
-            this.treeManager.placeTree(pos.x, pos.z, {
-                id: `gather_tree_${i}`,
-                type: 'oak_tree',
-                name: 'Oak Tree',
-                x: pos.x,
-                y: pos.z
-            });
-        });
+        // TODO Phase 8: resources are block types in voxel world
     }
 
     animate() {
@@ -1058,8 +1559,9 @@ export class Game {
             this.fpsTime = 0;
         }
 
-        // Update player
-        if (this.player) {
+        // Update player (skip movement in free-fly camera mode)
+        const isFreeFly = this.editorSystem?.cameraMode === 'freefly';
+        if (this.player && !isFreeFly) {
             this.player.update(deltaTime, this.inputManager.keys, this.cameraController.getYaw());
 
             // Send position to server
@@ -1096,8 +1598,20 @@ export class Game {
         // Update floating damage numbers
         this.updateDamageNumbers(deltaTime);
 
-        // Update tree animations (falling, respawning)
-        this.treeManager.update(deltaTime);
+        // Update spell projectiles + cast bar UI
+        this.updateProjectiles(deltaTime);
+        this.updateCastBar();
+
+        // Update chunk world (load/unload/mesh chunks around camera in free-fly, player otherwise)
+        if (this.chunkManager) {
+            const chunkCenter = isFreeFly ? this.camera.position : this.player?.getPosition();
+            if (chunkCenter) this.chunkManager.update(chunkCenter);
+        }
+
+        // Update atmospheric particles
+        if (this.atmosphericEffects && this.player) {
+            this.atmosphericEffects.update(deltaTime, this.player.getPosition());
+        }
 
         // Update other players
         for (const other of this.otherPlayers.values()) {
@@ -1109,16 +1623,48 @@ export class Game {
             this.cameraController.update(deltaTime);
         }
 
-        // Follow sun shadow
-        if (this.sun && this.player) {
-            const playerPos = this.player.getPosition();
-            this.sun.position.set(playerPos.x + 80, 100, playerPos.z + 50);
-            this.sun.target.position.copy(playerPos);
-            this.sun.target.updateMatrixWorld();
+        // Update editor (raycast + highlight + tools + HUD)
+        if (this.editorSystem) {
+            this.editorSystem.update(deltaTime);
         }
 
-        // Render
-        this.renderer.render(this.scene, this.camera);
+        // Follow moon shadow + player torch
+        if (this.sun && this.player) {
+            const playerPos = this.player.getPosition();
+            this.sun.position.set(playerPos.x + 40, 80, playerPos.z + 30);
+            this.sun.target.position.copy(playerPos);
+            this.sun.target.updateMatrixWorld();
+
+            if (this.playerTorch) {
+                this.playerTorch.position.set(playerPos.x, playerPos.y + 2, playerPos.z);
+            }
+        }
+
+        // Grass tuft billboards follow player + sway
+        if (this.grassBillboards && this.player) {
+            this.grassBillboards.update(
+                this.player.getPosition(),
+                this.camera.position,
+                this.clock.getElapsedTime()
+            );
+        }
+
+        // Refresh outlined objects (characters + enemies) so silhouettes pop
+        const outlined = [];
+        if (this.player?.mesh) outlined.push(this.player.mesh);
+        for (const other of this.otherPlayers.values()) {
+            if (other.mesh) outlined.push(other.mesh);
+        }
+        if (this.enemyManager) {
+            for (const m of this.enemyManager.getAllMeshes()) outlined.push(m);
+        }
+        this.postfx.outlinePass.selectedObjects = outlined;
+
+        // Per-frame cursor-aim raycast → hover reticle + hover outline
+        this._updateAimReticle();
+
+        // Render through post-processing composer
+        this.postfx.composer.render();
     }
 
     onResize() {
@@ -1128,6 +1674,7 @@ export class Game {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
+        if (this.postfx) this.postfx.setSize(width, height);
     }
 
     updateLoading(progress, text) {

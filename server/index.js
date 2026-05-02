@@ -12,6 +12,8 @@ const RegenSystem = require('./game/systems/RegenSystem');
 const CombatSystem = require('./game/systems/CombatSystem');
 const EnemySystem = require('./game/systems/EnemySystem');
 const LootSystem = require('./game/systems/LootSystem');
+const BlockSystem = require('./game/systems/BlockSystem');
+const { seedStarterTown } = require('./game/starterTown');
 const { createWebSocketServer } = require('./net/WebSocketServer');
 
 // Express app
@@ -37,6 +39,11 @@ app.get('/api/health', (req, res) => {
 const world = new GameWorld();
 world.init();
 
+// Seed the starter town (idempotent — skipped if already present in DB)
+seedStarterTown().catch(err => {
+    console.error('Failed to seed starter town:', err);
+});
+
 // Attach systems
 world.systems.movement = new MovementSystem(world);
 
@@ -45,6 +52,7 @@ world.systems.regen = new RegenSystem(world);
 world.systems.combat = new CombatSystem(world);
 world.systems.enemy = new EnemySystem(world);
 world.systems.loot = new LootSystem(world);
+world.systems.block = new BlockSystem(world);
 
 // Start game loop
 const gameLoop = new GameLoop(world);

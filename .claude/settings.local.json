@@ -19,7 +19,17 @@
       "Bash(# Verify port status echo \"\"Port 3000 \\(Vite\\):\"\" netstat -ano)",
       "Bash(gh auth status:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(python -c 'from PIL import Image; import os *)",
+      "Bash(python -m pip install Pillow --quiet)",
+      "Bash(python -c ' *)",
+      "Bash(python)",
+      "Bash(python tmp_gold_ore.py)",
+      "Bash(npm view *)",
+      "Bash(claude mcp *)",
+      "Bash(taskkill //F //PID 16480)",
+      "Bash(npx -y chrome-devtools-mcp@latest --help)",
+      "Bash(where node *)"
     ]
   }
 }

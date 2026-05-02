@@ -50,6 +50,9 @@ class Player {
         // Inventory (array of { item_key, quantity })
         this.inventory = inventory || [];
 
+        // Admin flag
+        this.isAdmin = characterData.is_admin || false;
+
         // Dirty flag for periodic saves
         this.dirty = false;
     }
@@ -193,6 +196,7 @@ class Player {
             critChance: this.critChance,
             powerStacks: this.powerStacks,
             totalStats: this.totalStats,
+            isAdmin: this.isAdmin,
         };
     }
 

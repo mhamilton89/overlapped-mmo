@@ -119,6 +119,18 @@ export class WebSocketClient {
         this.send('respawn');
     }
 
+    sendBlockPlace(x, y, z, blockId) {
+        this.send('blockPlace', { x, y, z, blockId });
+    }
+
+    sendBlockBreak(x, y, z) {
+        this.send('blockBreak', { x, y, z });
+    }
+
+    sendRequestChunkDeltas(cx, cy, cz) {
+        this.send('requestChunkDeltas', { cx, cy, cz });
+    }
+
     disconnect() {
         if (this.ws) {
             this.ws.close();

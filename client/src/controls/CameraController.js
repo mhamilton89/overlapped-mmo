@@ -27,6 +27,7 @@ export class CameraController {
         this.lastMouseX = 0;
         this.lastMouseY = 0;
         this.mouseSensitivity = 0.004;
+        this.enabled = true;
 
         this.setupListeners();
     }
@@ -53,7 +54,7 @@ export class CameraController {
     }
 
     update(deltaTime) {
-        if (!this.target) return;
+        if (!this.enabled || !this.target) return;
 
         // Where we want the camera to look at (above player)
         const lookTarget = new THREE.Vector3(
@@ -77,7 +78,7 @@ export class CameraController {
         );
 
         // Prevent camera from going below terrain
-        if (desiredPosition.y < 1) desiredPosition.y = 1;
+        if (desiredPosition.y < 2) desiredPosition.y = 2;
 
         // Smooth camera position
         this.currentPosition.lerp(desiredPosition, Math.min(1, this.smoothSpeed * deltaTime));

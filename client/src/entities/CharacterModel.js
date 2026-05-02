@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { MicroVoxelModel } from '../designer/MicroVoxelModel.js';
+import { buildEquipmentMesh } from '../designer/MicroVoxelMesher.js';
+import { createTubeGeometry } from '../designer/curveGeometry.js';
 
 export const CLASS_COLORS = {
     'Warrior': 0xc62828,
@@ -63,7 +66,88 @@ export class CharacterModel {
         this.isAttacking = false;
         this.attackTime = 0;
 
+        // Cast state (for spells like fireball)
+        this.isCasting = false;
+        this.castTime = 0;
+        this.castDuration = 1.0;
+        this._castComplete = null;
+        this.castOrb = null;
+
         this._build();
+        this._buildCastOrb();
+    }
+
+    _buildCastOrb() {
+        // Small glowing sphere that appears near the casting hand(s) during a cast.
+        // Hidden by default, color/position updated per-spell on triggerCast.
+        const orbMat = new THREE.MeshStandardMaterial({
+            color: 0xff8a1a,
+            emissive: 0xff6a1a,
+            emissiveIntensity: 2.0,
+            roughness: 0.3,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.9,
+        });
+        this.castOrb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.12, 10, 8),
+            orbMat
+        );
+        this.castOrb.visible = false;
+        this.group.add(this.castOrb);
+
+        this._castPose = 'two-hand';
+        this._castOrbHome = new THREE.Vector3(0, 0.55, -0.55);
+    }
+
+    /**
+     * Start a cast.
+     * @param {object} opts
+     *   - duration: seconds (default 1.0)
+     *   - pose: 'two-hand' | 'one-hand' (default 'two-hand')
+     *   - orbColor: hex color for both color + emissive (default orange)
+     *   - onComplete: () => void, fired when animation finishes normally
+     * Returns true if started, false if busy (attacking/chopping/casting already).
+     */
+    triggerCast(opts = {}) {
+        if (this.isCasting || this.isAttacking || this.isChopping) return false;
+
+        this.isCasting = true;
+        this.castTime = 0;
+        this.castDuration = opts.duration ?? 1.0;
+        this._castComplete = opts.onComplete ?? null;
+        this._castPose = opts.pose ?? 'two-hand';
+
+        const orbColor = opts.orbColor ?? 0xff6a1a;
+        this.castOrb.material.color.setHex(orbColor);
+        this.castOrb.material.emissive.setHex(orbColor);
+
+        // Position the orb appropriately for the pose
+        if (this._castPose === 'one-hand') {
+            // Near the raised right hand (arm rotation.x = -2.3, rotation.z = -0.3)
+            this._castOrbHome.set(0.55, 1.05, -0.15);
+        } else {
+            this._castOrbHome.set(0, 0.55, -0.55);
+        }
+        this.castOrb.position.copy(this._castOrbHome);
+        return true;
+    }
+
+    /** Cancel an in-progress cast without firing the completion callback. */
+    cancelCast() {
+        if (!this.isCasting) return;
+        this.isCasting = false;
+        this.castTime = 0;
+        this._castComplete = null;
+        if (this.castOrb) this.castOrb.visible = false;
+        this.rightArmPivot.rotation.z = 0;
+        this.leftArmPivot.rotation.z = 0;
+    }
+
+    /** 0..1 fraction of current cast, or 0 if not casting. */
+    getCastProgress() {
+        if (!this.isCasting) return 0;
+        return Math.min(1, this.castTime / this.castDuration);
     }
 
     _build() {
@@ -71,13 +155,13 @@ export class CharacterModel {
         const bootColor = darkenColor(classColor, 0.7);
 
         const classMat = new THREE.MeshStandardMaterial({
-            color: classColor, roughness: 0.6, metalness: 0.2
+            color: classColor, roughness: 0.6, metalness: 0.2, flatShading: true
         });
         const skinMat = new THREE.MeshStandardMaterial({
-            color: SKIN_COLOR, roughness: 0.7
+            color: SKIN_COLOR, roughness: 0.7, flatShading: true
         });
         const bootMat = new THREE.MeshStandardMaterial({
-            color: bootColor, roughness: 0.65, metalness: 0.15
+            color: bootColor, roughness: 0.65, metalness: 0.15, flatShading: true
         });
 
         // Torso
@@ -182,11 +266,13 @@ export class CharacterModel {
         }
         switch (g.type) {
             case 'sphere':
-                return new THREE.SphereGeometry(g.radius, g.wSeg ?? 12, g.hSeg ?? 8);
+                return new THREE.SphereGeometry(g.radius, g.wSeg ?? 8, g.hSeg ?? 6);
             case 'cylinder':
-                return new THREE.CylinderGeometry(g.rTop, g.rBot, g.h, g.seg ?? 12);
+                return new THREE.CylinderGeometry(g.rTop, g.rBot, g.h, g.seg ?? 8);
             case 'cone':
-                return new THREE.ConeGeometry(g.radius, g.height, g.seg ?? 10);
+                return new THREE.ConeGeometry(g.radius, g.height, g.seg ?? 7);
+            case 'tube':
+                return createTubeGeometry(g);
             case 'box':
             default:
                 return new THREE.BoxGeometry(g.size[0], g.size[1], g.size[2]);
@@ -202,14 +288,37 @@ export class CharacterModel {
         const meshes = [];
 
         for (const piece of armorDef.pieces) {
-            const mat = new THREE.MeshStandardMaterial({
-                color: piece.color,
-                roughness: piece.roughness ?? 0.4,
-                metalness: piece.metalness ?? 0.6,
-            });
+            let mesh;
 
-            const geo = this._createGeo(piece);
-            const mesh = new THREE.Mesh(geo, mat);
+            if (piece.voxel && piece.modelData) {
+                // Voxel micro-item: build from MicroVoxelModel data
+                const model = MicroVoxelModel.deserialize(piece.modelData);
+                mesh = buildEquipmentMesh(model, piece.voxelScale || 0.03, {
+                    metalness: piece.metalness ?? 0.3,
+                    roughness: piece.roughness ?? 0.5,
+                });
+            } else {
+                const geo = this._createGeo(piece);
+                const matOpts = {
+                    roughness: piece.roughness ?? 0.4,
+                    metalness: piece.metalness ?? 0.6,
+                    flatShading: true,
+                    side: piece.mirror ? THREE.DoubleSide : THREE.FrontSide,
+                };
+                if (piece.emissive !== undefined) {
+                    matOpts.emissive = piece.emissive;
+                    matOpts.emissiveIntensity = piece.emissiveIntensity ?? 1;
+                }
+                let material;
+                const isBox = !piece.geo || piece.geo.type === 'box';
+                if (isBox && Array.isArray(piece.faceColors) && piece.faceColors.length === 6) {
+                    material = piece.faceColors.map(c => new THREE.MeshStandardMaterial({ ...matOpts, color: c }));
+                } else {
+                    material = new THREE.MeshStandardMaterial({ ...matOpts, color: piece.color });
+                }
+                mesh = new THREE.Mesh(geo, material);
+                if (piece.mirror) mesh.scale.x = -1;
+            }
 
             // Position the overlay relative to the body part it covers
             const target = this.parts[piece.target];
@@ -246,7 +355,11 @@ export class CharacterModel {
         for (const mesh of overlay.meshes) {
             mesh.parent.remove(mesh);
             mesh.geometry.dispose();
-            mesh.material.dispose();
+            if (Array.isArray(mesh.material)) {
+                for (const m of mesh.material) m.dispose();
+            } else {
+                mesh.material.dispose();
+            }
         }
 
         delete this.armorOverlays[slot];
@@ -274,7 +387,7 @@ export class CharacterModel {
 
         // Handle
         const handleMat = new THREE.MeshStandardMaterial({
-            color: 0x8b5a2b, roughness: 0.8, metalness: 0.1
+            color: 0x8b5a2b, roughness: 0.8, metalness: 0.1, flatShading: true
         });
         const handle = new THREE.Mesh(
             new THREE.BoxGeometry(0.06, 0.55, 0.06),
@@ -285,7 +398,7 @@ export class CharacterModel {
 
         // Blade
         const bladeMat = new THREE.MeshStandardMaterial({
-            color: 0xaaaaaa, roughness: 0.3, metalness: 0.8
+            color: 0xaaaaaa, roughness: 0.3, metalness: 0.8, flatShading: true
         });
         const blade = new THREE.Mesh(
             new THREE.BoxGeometry(0.22, 0.2, 0.04),
@@ -331,6 +444,58 @@ export class CharacterModel {
         const idleBob = Math.sin(idlePhase) * 0.02 * idle;
         const idleArmL = Math.sin(idlePhase) * 0.03 * idle;
         const idleArmR = Math.sin(idlePhase + 0.5) * 0.03 * idle;
+
+        // Cast animation — pose varies by spell type
+        if (this.isCasting) {
+            this.castTime += deltaTime;
+            const t = Math.min(1, this.castTime / this.castDuration);
+
+            if (this._castPose === 'one-hand') {
+                // Right arm raised high and slightly out — palm toward sky
+                this.rightArmPivot.rotation.x = -2.3;
+                this.rightArmPivot.rotation.z = -0.3;
+                this.leftArmPivot.rotation.x = 0.1;
+                this.leftArmPivot.rotation.z = 0;
+                // Slight torso lean back / chin up
+                this.torso.rotation.x = -0.06;
+                this.head.rotation.x = -0.12;
+            } else {
+                // Two-hand: both arms raised forward-up, cupping the orb
+                this.rightArmPivot.rotation.x = -1.6;
+                this.rightArmPivot.rotation.z = 0;
+                this.leftArmPivot.rotation.x = -1.6;
+                this.leftArmPivot.rotation.z = 0;
+                this.torso.rotation.x = 0.08;
+                this.head.rotation.x = 0.08;
+            }
+
+            this.torso.position.y = this.torsoBaseY;
+            this.head.position.y = this.headBaseY;
+
+            // Legs planted
+            this.leftLegPivot.rotation.x = 0;
+            this.rightLegPivot.rotation.x = 0;
+
+            // Orb grows and pulses as cast charges
+            this.castOrb.visible = true;
+            const pulse = 1 + Math.sin(this.castTime * 24) * 0.08;
+            const scale = (0.25 + t * 1.8) * pulse;
+            this.castOrb.scale.set(scale, scale, scale);
+            this.castOrb.material.emissiveIntensity = 1.5 + t * 2.0;
+
+            if (t >= 1) {
+                this.isCasting = false;
+                this.castTime = 0;
+                this.castOrb.visible = false;
+                // Reset shoulder z rotation so it doesn't leak into the next frame
+                this.rightArmPivot.rotation.z = 0;
+                this.leftArmPivot.rotation.z = 0;
+                const cb = this._castComplete;
+                this._castComplete = null;
+                if (cb) cb();
+            }
+            return;
+        }
 
         // Attack animation (quick punch, auto-completes in 0.4s)
         if (this.isAttacking) {

@@ -3,7 +3,6 @@ import { CharacterModel } from './CharacterModel.js';
 import { getCharacterVisuals } from './armorVisuals.js';
 
 const PLAYER_RADIUS = 0.5;
-const TREE_COLLISION_RADIUS = 1.2;
 
 export class Player {
     constructor(scene, characterData = {}) {
@@ -16,8 +15,8 @@ export class Player {
         this.direction = new THREE.Vector3();
         this.isMoving = false;
 
-        // Collision obstacles set by Game.js
-        this.collisionObjects = [];
+        // ChunkManager reference for ground height queries (set by Game.js)
+        this.chunkManager = null;
 
         this.createMesh();
     }
@@ -63,40 +62,21 @@ export class Player {
             this.mesh.rotation.y += rotDiff * Math.min(1, 10 * deltaTime);
         }
 
-        // Tree collision
-        this.resolveCollisions();
-
-        // Clamp to terrain bounds
-        const bounds = 250;
-        this.mesh.position.x = Math.max(-bounds, Math.min(bounds, this.mesh.position.x));
-        this.mesh.position.z = Math.max(-bounds, Math.min(bounds, this.mesh.position.z));
-
-        // Keep on ground
-        this.mesh.position.y = 1;
+        // Snap to ground height from voxel terrain
+        // Model origin is at waist; feet are ~1.05 below origin
+        const FOOT_OFFSET = 1.05;
+        if (this.chunkManager) {
+            const groundY = this.chunkManager.getGroundHeight(
+                Math.floor(this.mesh.position.x),
+                Math.floor(this.mesh.position.z)
+            );
+            this.mesh.position.y = groundY + FOOT_OFFSET;
+        } else {
+            this.mesh.position.y = 1 + FOOT_OFFSET;
+        }
 
         // Animate character model
         this.model.update(deltaTime, this.isMoving);
-    }
-
-    resolveCollisions() {
-        const px = this.mesh.position.x;
-        const pz = this.mesh.position.z;
-
-        for (const obj of this.collisionObjects) {
-            const ox = obj.position.x;
-            const oz = obj.position.z;
-            const dx = px - ox;
-            const dz = pz - oz;
-            const distSq = dx * dx + dz * dz;
-            const minDist = PLAYER_RADIUS + TREE_COLLISION_RADIUS;
-
-            if (distSq < minDist * minDist && distSq > 0.0001) {
-                const dist = Math.sqrt(distSq);
-                const overlap = minDist - dist;
-                this.mesh.position.x += (dx / dist) * overlap;
-                this.mesh.position.z += (dz / dist) * overlap;
-            }
-        }
     }
 
     getPosition() {

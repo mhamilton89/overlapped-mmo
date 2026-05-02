@@ -18,6 +18,8 @@ export class InputManager {
             leftDown: false
         };
 
+        this.suppressMovement = false; // set by EditorSystem in free-fly mode
+
         this.setupKeyboardListeners();
         this.setupMouseListeners();
     }
@@ -57,13 +59,13 @@ export class InputManager {
 
     handleKey(code, pressed) {
         switch (code) {
-            case 'KeyW': this.keys.forward = pressed; break;
-            case 'KeyS': this.keys.backward = pressed; break;
-            case 'KeyA': this.keys.left = pressed; break;
-            case 'KeyD': this.keys.right = pressed; break;
-            case 'Space': this.keys.jump = pressed; break;
+            case 'KeyW': if (!this.suppressMovement) this.keys.forward = pressed; break;
+            case 'KeyS': if (!this.suppressMovement) this.keys.backward = pressed; break;
+            case 'KeyA': if (!this.suppressMovement) this.keys.left = pressed; break;
+            case 'KeyD': if (!this.suppressMovement) this.keys.right = pressed; break;
+            case 'Space': if (!this.suppressMovement) this.keys.jump = pressed; break;
             case 'KeyE':
-            case 'KeyF': this.keys.interact = pressed; break;
+            case 'KeyF': if (!this.suppressMovement) this.keys.interact = pressed; break;
         }
     }
 

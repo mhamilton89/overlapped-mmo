@@ -3,7 +3,7 @@ const pool = require('../pool');
 async function getCharactersByAccount(accountId) {
     const result = await pool.query(
         `SELECT id, name, class, level, xp, current_hp, current_mana,
-                pos_x, pos_y, rotation, gold, created_at
+                pos_x, pos_y, rotation, gold, is_admin, created_at
          FROM characters WHERE account_id = $1
          ORDER BY created_at ASC`,
         [accountId]
@@ -14,7 +14,7 @@ async function getCharactersByAccount(accountId) {
 async function getCharacterById(id) {
     const result = await pool.query(
         `SELECT id, account_id, name, class, level, xp,
-                current_hp, current_mana, pos_x, pos_y, rotation, gold
+                current_hp, current_mana, pos_x, pos_y, rotation, gold, is_admin
          FROM characters WHERE id = $1`,
         [id]
     );

@@ -123,6 +123,9 @@ class GatheringSystem {
         // Calculate yields
         const items = [];
         for (const yieldDef of resource.yields) {
+            // Skip yield if it has a chance roll and fails
+            if (yieldDef.chance !== undefined && Math.random() > yieldDef.chance) continue;
+
             const quantity = Math.floor(Math.random() * (yieldDef.max - yieldDef.min + 1)) + yieldDef.min;
             items.push({ key: yieldDef.itemKey, quantity });
 

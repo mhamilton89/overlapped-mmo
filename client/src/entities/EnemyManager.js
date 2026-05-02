@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // ── Procedural model builders ──────────────────────────────────────
 
 function _mat(color) {
-    return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 });
+    return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1, flatShading: true });
 }
 
 function _box(w, h, d, color) {
@@ -198,9 +198,339 @@ function createBoar() {
     return group;
 }
 
+// ── Dark Forest enemy builders ────────────────────────────────────────
+
+function createSkeleton() {
+    const group = new THREE.Group();
+    const BONE = 0xe8dcc8;
+    const DARK_BONE = 0xc8b8a0;
+    const BLACK = 0x111111;
+    const IRON = 0x555555;
+
+    // Torso (thin)
+    const torso = _box(0.4, 0.5, 0.25, BONE);
+    torso.position.set(0, 1.1, 0);
+    group.add(torso);
+
+    // Ribs (horizontal lines on torso)
+    for (let i = 0; i < 3; i++) {
+        const rib = _box(0.42, 0.03, 0.18, DARK_BONE);
+        rib.position.set(0, 1.0 + i * 0.15, 0.05);
+        group.add(rib);
+    }
+
+    // Head (skull)
+    const head = _box(0.35, 0.35, 0.3, BONE);
+    head.position.set(0, 1.65, 0);
+    group.add(head);
+
+    // Eye sockets (dark recessed spheres)
+    const eyeL = _sphere(0.06, BLACK);
+    eyeL.position.set(0.1, 1.7, 0.14);
+    group.add(eyeL);
+    const eyeR = _sphere(0.06, BLACK);
+    eyeR.position.set(-0.1, 1.7, 0.14);
+    group.add(eyeR);
+
+    // Jaw
+    const jaw = _box(0.28, 0.08, 0.2, DARK_BONE);
+    jaw.position.set(0, 1.45, 0.02);
+    group.add(jaw);
+
+    // Arms (thin bones)
+    const armL = _cylinder(0.04, 0.04, 0.5, BONE);
+    armL.position.set(0.3, 1.0, 0);
+    armL.rotation.z = 0.2;
+    group.add(armL);
+    const armR = _cylinder(0.04, 0.04, 0.5, BONE);
+    armR.position.set(-0.3, 1.0, 0);
+    armR.rotation.z = -0.2;
+    group.add(armR);
+
+    // Legs (thin bones)
+    const legL = _cylinder(0.05, 0.04, 0.55, BONE);
+    legL.position.set(0.12, 0.4, 0);
+    group.add(legL);
+    const legR = _cylinder(0.05, 0.04, 0.55, BONE);
+    legR.position.set(-0.12, 0.4, 0);
+    group.add(legR);
+
+    // Small rusty sword in right hand
+    const blade = _box(0.06, 0.5, 0.02, IRON);
+    blade.position.set(-0.35, 0.9, 0.15);
+    blade.rotation.z = -0.3;
+    group.add(blade);
+    const hilt = _box(0.12, 0.06, 0.04, 0x443322);
+    hilt.position.set(-0.3, 0.65, 0.15);
+    group.add(hilt);
+
+    return group;
+}
+
+function createSpider() {
+    const group = new THREE.Group();
+    const BODY_COLOR = 0x2a1a0a;
+    const LEG_COLOR = 0x1a1008;
+    const RED = 0xcc0000;
+    const WHITE = 0xdddddd;
+
+    // Main body
+    const body = _sphere(0.35, BODY_COLOR);
+    body.position.set(0, 0.5, 0);
+    group.add(body);
+
+    // Abdomen (larger, behind)
+    const abdomen = _sphere(0.45, 0x1f1208);
+    abdomen.position.set(0, 0.5, -0.55);
+    group.add(abdomen);
+
+    // Head (smaller, front)
+    const head = _sphere(0.2, BODY_COLOR);
+    head.position.set(0, 0.55, 0.35);
+    group.add(head);
+
+    // Red eye cluster
+    for (let i = 0; i < 6; i++) {
+        const eye = _sphere(0.035, RED, { emissive: 0x660000, emissiveIntensity: 0.6 });
+        eye.position.set(
+            (i % 3 - 1) * 0.06,
+            0.6 + Math.floor(i / 3) * 0.06,
+            0.5
+        );
+        group.add(eye);
+    }
+
+    // Fangs
+    const fangL = _cone(0.03, 0.12, WHITE, 6);
+    fangL.position.set(0.06, 0.42, 0.45);
+    fangL.rotation.x = Math.PI;
+    group.add(fangL);
+    const fangR = _cone(0.03, 0.12, WHITE, 6);
+    fangR.position.set(-0.06, 0.42, 0.45);
+    fangR.rotation.x = Math.PI;
+    group.add(fangR);
+
+    // 8 legs (4 per side)
+    const legAngles = [0.5, 1.0, 1.5, 2.0];
+    for (let side = 0; side < 2; side++) {
+        const sideSign = side === 0 ? 1 : -1;
+        for (let i = 0; i < 4; i++) {
+            const angle = legAngles[i];
+
+            // Upper leg
+            const upper = _cylinder(0.03, 0.025, 0.5, LEG_COLOR);
+            upper.position.set(sideSign * 0.3, 0.5, 0.2 - i * 0.25);
+            upper.rotation.z = sideSign * -angle;
+            upper.rotation.x = (i - 1.5) * 0.15;
+            group.add(upper);
+
+            // Lower leg
+            const lower = _cylinder(0.025, 0.02, 0.45, LEG_COLOR);
+            lower.position.set(
+                sideSign * (0.3 + Math.sin(angle) * 0.5),
+                0.15,
+                0.2 - i * 0.25
+            );
+            lower.rotation.z = sideSign * -(angle - 0.3);
+            group.add(lower);
+        }
+    }
+
+    return group;
+}
+
+function createZombie() {
+    const group = new THREE.Group();
+    const SKIN = 0x5a6b4a;
+    const DARK_SKIN = 0x4a5a3a;
+    const CLOTH = 0x3a3030;
+    const RED_EYE = 0xff2200;
+    const BLACK = 0x111111;
+
+    // Bulky torso
+    const torso = _box(0.65, 0.7, 0.4, SKIN);
+    torso.position.set(0, 1.05, 0);
+    group.add(torso);
+
+    // Torn clothing patches
+    const patch1 = _box(0.3, 0.25, 0.42, CLOTH);
+    patch1.position.set(0.1, 1.1, 0);
+    group.add(patch1);
+    const patch2 = _box(0.2, 0.15, 0.42, 0x2a2020);
+    patch2.position.set(-0.15, 0.9, 0);
+    group.add(patch2);
+
+    // Head
+    const head = _box(0.45, 0.45, 0.4, DARK_SKIN);
+    head.position.set(0, 1.65, 0.05);
+    group.add(head);
+
+    // Eyes — one normal (dark), one glowing red
+    const eyeL = _sphere(0.06, BLACK);
+    eyeL.position.set(0.12, 1.7, 0.2);
+    group.add(eyeL);
+    const eyeR = _sphere(0.07, RED_EYE, { emissive: 0xff0000, emissiveIntensity: 0.8 });
+    eyeR.position.set(-0.12, 1.7, 0.2);
+    group.add(eyeR);
+
+    // Mouth (dark slit)
+    const mouth = _box(0.2, 0.04, 0.05, BLACK);
+    mouth.position.set(0, 1.52, 0.22);
+    group.add(mouth);
+
+    // Arms extended forward (zombie shamble)
+    const armL = _cylinder(0.1, 0.08, 0.55, SKIN);
+    armL.position.set(0.4, 1.0, 0.25);
+    armL.rotation.x = -0.5; // reaching forward
+    armL.rotation.z = 0.15;
+    group.add(armL);
+    const armR = _cylinder(0.1, 0.08, 0.55, SKIN);
+    armR.position.set(-0.4, 1.0, 0.25);
+    armR.rotation.x = -0.5;
+    armR.rotation.z = -0.15;
+    group.add(armR);
+
+    // Legs (stumpy)
+    const legL = _cylinder(0.12, 0.1, 0.55, DARK_SKIN);
+    legL.position.set(0.15, 0.35, 0);
+    group.add(legL);
+    const legR = _cylinder(0.12, 0.1, 0.55, DARK_SKIN);
+    legR.position.set(-0.15, 0.35, 0);
+    group.add(legR);
+
+    return group;
+}
+
+function createWraith() {
+    const group = new THREE.Group();
+
+    const ghostMat = new THREE.MeshStandardMaterial({
+        color: 0x2a1a3a,
+        roughness: 0.5,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false
+    });
+
+    // Tall thin body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 0.35), ghostMat);
+    body.position.set(0, 1.4, 0);
+    body.castShadow = false;
+    group.add(body);
+
+    // Head (hooded shape)
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.4, 0.4), ghostMat);
+    hood.position.set(0, 2.15, 0);
+    group.add(hood);
+
+    // Glowing eyes
+    const eyeMat = new THREE.MeshStandardMaterial({
+        color: 0xff3300,
+        emissive: 0xff3300,
+        emissiveIntensity: 1.5
+    });
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), eyeMat);
+    eyeL.position.set(0.1, 2.2, 0.2);
+    group.add(eyeL);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), eyeMat);
+    eyeR.position.set(-0.1, 2.2, 0.2);
+    group.add(eyeR);
+
+    // Arms (wispy, extended)
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), ghostMat);
+    armL.position.set(0.35, 1.3, 0.1);
+    armL.rotation.z = 0.3;
+    armL.rotation.x = -0.2;
+    group.add(armL);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), ghostMat);
+    armR.position.set(-0.35, 1.3, 0.1);
+    armR.rotation.z = -0.3;
+    armR.rotation.x = -0.2;
+    group.add(armR);
+
+    // Tapers to wispy point (no legs) — inverted cone
+    const tailGeo = new THREE.ConeGeometry(0.3, 1.0, 8);
+    const tail = new THREE.Mesh(tailGeo, ghostMat);
+    tail.position.set(0, 0.4, 0);
+    group.add(tail);
+
+    return group;
+}
+
+function createGolem() {
+    const group = new THREE.Group();
+    const STONE = 0x3a3a3a;
+    const DARK_STONE = 0x2a2a2a;
+    const GLOW_GREEN = 0x00ff44;
+
+    const runeMat = new THREE.MeshStandardMaterial({
+        color: GLOW_GREEN,
+        emissive: GLOW_GREEN,
+        emissiveIntensity: 0.8
+    });
+
+    // Large chunky body (1.5x scale relative to player)
+    const torso = _box(1.0, 1.0, 0.7, STONE);
+    torso.position.set(0, 1.5, 0);
+    group.add(torso);
+
+    // Rune lines on torso
+    const rune1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.72), runeMat);
+    rune1.position.set(0, 1.5, 0);
+    group.add(rune1);
+    const rune2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.72), runeMat);
+    rune2.position.set(0, 1.5, 0);
+    group.add(rune2);
+
+    // Head (blocky)
+    const head = _box(0.55, 0.5, 0.5, DARK_STONE);
+    head.position.set(0, 2.3, 0);
+    group.add(head);
+
+    // Glowing green eyes
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), runeMat);
+    eyeL.position.set(0.15, 2.35, 0.25);
+    group.add(eyeL);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), runeMat);
+    eyeR.position.set(-0.15, 2.35, 0.25);
+    group.add(eyeR);
+
+    // Thick arms
+    const armL = _box(0.35, 0.8, 0.35, STONE);
+    armL.position.set(0.65, 1.3, 0);
+    group.add(armL);
+    const armR = _box(0.35, 0.8, 0.35, STONE);
+    armR.position.set(-0.65, 1.3, 0);
+    group.add(armR);
+
+    // Thick legs
+    const legL = _box(0.3, 0.7, 0.35, DARK_STONE);
+    legL.position.set(0.25, 0.5, 0);
+    group.add(legL);
+    const legR = _box(0.3, 0.7, 0.35, DARK_STONE);
+    legR.position.set(-0.25, 0.5, 0);
+    group.add(legR);
+
+    // Moss patches
+    const moss1 = _box(0.2, 0.1, 0.15, 0x2a4a1a);
+    moss1.position.set(0.3, 1.8, 0.35);
+    group.add(moss1);
+    const moss2 = _box(0.15, 0.12, 0.2, 0x1a3a15);
+    moss2.position.set(-0.4, 1.2, 0.35);
+    group.add(moss2);
+
+    return group;
+}
+
 const MODEL_BUILDERS = {
     forest_wolf: createWolf,
     forest_boar: createBoar,
+    skeleton_warrior: createSkeleton,
+    giant_spider: createSpider,
+    restless_zombie: createZombie,
+    shadow_wraith: createWraith,
+    grave_golem: createGolem,
 };
 
 // ── EnemyManager ───────────────────────────────────────────────────
@@ -426,11 +756,35 @@ export class EnemyManager {
             wolf_pelt: 'Wolf Pelt', wolf_fang: 'Wolf Fang',
             boar_tusk: 'Boar Tusk', boar_hide: 'Boar Hide',
             leather_scraps: 'Leather Scraps',
+            // Dark Forest drops
+            bone_fragment: 'Bone Fragment', tattered_cloth: 'Tattered Cloth',
+            spider_silk: 'Spider Silk', venom_sac: 'Venom Sac',
+            rotting_flesh: 'Rotting Flesh', zombie_tooth: 'Zombie Tooth',
+            shadow_essence: 'Shadow Essence', spectral_dust: 'Spectral Dust',
+            wraith_cloth: 'Wraith Cloth',
+            golem_core: 'Golem Core', enchanted_stone: 'Enchanted Stone',
+            grave_moss: 'Grave Moss',
+            // Dark Forest gathering
+            dead_wood: 'Dead Wood', glowing_mushroom: 'Glowing Mushroom',
+            luminescent_cap: 'Luminescent Cap',
+            grave_dirt: 'Grave Dirt', ancient_bone: 'Ancient Bone',
         };
         const ITEM_ICONS = {
             wolf_pelt: '\u{1F43E}', wolf_fang: '\u{1F9B7}',
             boar_tusk: '\u{1F9B7}', boar_hide: '\u{1F9BE}',
             leather_scraps: '\u{1F9F6}',
+            // Dark Forest drops
+            bone_fragment: '\u{1F9B4}', tattered_cloth: '\u{1FA78}',
+            spider_silk: '\u{1F578}', venom_sac: '\u{1F9EA}',
+            rotting_flesh: '\u{1F356}', zombie_tooth: '\u{1F9B7}',
+            shadow_essence: '\u{1F30C}', spectral_dust: '\u{2728}',
+            wraith_cloth: '\u{1F47B}',
+            golem_core: '\u{1F48E}', enchanted_stone: '\u{1FAA8}',
+            grave_moss: '\u{1F33F}',
+            // Dark Forest gathering
+            dead_wood: '\u{1FAB5}', glowing_mushroom: '\u{1F344}',
+            luminescent_cap: '\u{2728}',
+            grave_dirt: '\u{1FABB}', ancient_bone: '\u{1F9B4}',
         };
         for (const item of (data.items || [])) {
             items.push({

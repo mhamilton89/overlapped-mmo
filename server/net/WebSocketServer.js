@@ -116,6 +116,30 @@ async function handleMessage(world, ws, message) {
             }
             break;
 
+        case 'blockPlace':
+            if (world.systems.block) {
+                world.systems.block.handlePlace(player, message);
+            }
+            break;
+
+        case 'blockBreak':
+            if (world.systems.block) {
+                world.systems.block.handleBreak(player, message);
+            }
+            break;
+
+        case 'blockBatch':
+            if (world.systems.block) {
+                world.systems.block.handleBatch(player, message);
+            }
+            break;
+
+        case 'requestChunkDeltas':
+            if (world.systems.block) {
+                world.systems.block.handleChunkRequest(player, message);
+            }
+            break;
+
         case 'respawn':
             if (!player.isAlive()) {
                 player.currentHp = player.maxHp;
